@@ -5,11 +5,24 @@ import { homedir } from 'node:os';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 
 // Mock dependencies
-vi.mock('node:child_process');
+vi.mock('node:child_process', () => ({
+  spawn: vi.fn()
+}));
 vi.mock('node:fs');
 vi.mock('node:os');
+vi.mock('node:path', () => ({
+  resolve: vi.fn((path) => path),
+  join: vi.fn((...args) => args.join('/')),
+  isAbsolute: vi.fn((path) => path.startsWith('/'))
+}));
 vi.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
-  Server: vi.fn()
+  Server: vi.fn().mockImplementation(function(this: any) {
+    this.setRequestHandler = vi.fn();
+    this.connect = vi.fn();
+    this.close = vi.fn();
+    this.onerror = undefined;
+    return this;
+  }),
 }));
 
 vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
@@ -17,7 +30,8 @@ vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
   CallToolRequestSchema: { name: 'callTool' },
   ErrorCode: { 
     InternalError: 'InternalError',
-    MethodNotFound: 'MethodNotFound'
+    MethodNotFound: 'MethodNotFound',
+    InvalidParams: 'InvalidParams'
   },
   McpError: vi.fn().mockImplementation((code, message) => {
     const error = new Error(message);
@@ -35,27 +49,27 @@ describe('Argument Validation Tests', () => {
 
   function setupServerMock() {
     errorHandler = null;
-    vi.mocked(Server).mockImplementation(() => {
-      const instance = {
-        setRequestHandler: vi.fn(),
-        connect: vi.fn(),
-        close: vi.fn(),
-        onerror: null
-      } as any;
-      Object.defineProperty(instance, 'onerror', {
+    vi.mocked(Server).mockImplementation(function(this: any) {
+      this.setRequestHandler = vi.fn();
+      this.connect = vi.fn();
+      this.close = vi.fn();
+      Object.defineProperty(this, 'onerror', {
         get() { return errorHandler; },
         set(handler) { errorHandler = handler; },
         enumerable: true,
         configurable: true
       });
-      return instance;
+      return this;
     });
   }
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    vi.unmock('../server.js');
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Set up process.env
+    process.env = { ...process.env };
   });
 
   describe('Tool Arguments Schema', () => {
@@ -82,12 +96,14 @@ describe('Argument Validation Tests', () => {
       // Extract schema from tool definition
       const schema = z.object({
         prompt: z.string(),
-        workFolder: z.string().optional()
+        workFolder: z.string(),
+        model: z.string().optional(),
+        session_id: z.string().optional()
       });
       
       // Test valid cases
-      expect(() => schema.parse({ prompt: 'test' })).not.toThrow();
       expect(() => schema.parse({ prompt: 'test', workFolder: '/tmp' })).not.toThrow();
+      expect(() => schema.parse({ prompt: 'test', workFolder: '/tmp', model: 'sonnet' })).not.toThrow();
     });
 
     it('should reject invalid arguments', async () => {
@@ -113,52 +129,65 @@ describe('Argument Validation Tests', () => {
       // Extract schema from tool definition
       const schema = z.object({
         prompt: z.string(),
-        workFolder: z.string().optional()
+        workFolder: z.string(),
+        model: z.string().optional(),
+        session_id: z.string().optional()
       });
       
       // Test invalid cases
-      expect(() => schema.parse({})).toThrow(); // Missing prompt
-      expect(() => schema.parse({ prompt: 123 })).toThrow(); // Wrong type
+      expect(() => schema.parse({})).toThrow(); // Missing prompt and workFolder
+      expect(() => schema.parse({ prompt: 'test' })).toThrow(); // Missing workFolder
+      expect(() => schema.parse({ prompt: 123, workFolder: '/tmp' })).toThrow(); // Wrong prompt type
       expect(() => schema.parse({ prompt: 'test', workFolder: 123 })).toThrow(); // Wrong workFolder type
     });
 
     it('should handle missing required fields', async () => {
       const schema = z.object({
         prompt: z.string(),
-        workFolder: z.string().optional()
+        workFolder: z.string(),
+        model: z.string().optional(),
+        session_id: z.string().optional()
       });
       
       try {
         schema.parse({});
       } catch (error: any) {
-        expect(error.errors[0].path).toEqual(['prompt']);
-        expect(error.errors[0].message).toContain('Required');
+        // Both prompt and workFolder are required
+        expect(error.errors.length).toBe(2);
+        expect(error.errors.some((e: any) => e.path[0] === 'prompt')).toBe(true);
+        expect(error.errors.some((e: any) => e.path[0] === 'workFolder')).toBe(true);
       }
     });
 
     it('should allow optional fields to be undefined', async () => {
       const schema = z.object({
         prompt: z.string(),
-        workFolder: z.string().optional()
+        workFolder: z.string(),
+        model: z.string().optional(),
+        session_id: z.string().optional()
       });
       
-      const result = schema.parse({ prompt: 'test' });
-      expect(result.workFolder).toBeUndefined();
+      const result = schema.parse({ prompt: 'test', workFolder: '/tmp' });
+      expect(result.model).toBeUndefined();
+      expect(result.session_id).toBeUndefined();
     });
 
     it('should handle extra fields gracefully', async () => {
       const schema = z.object({
         prompt: z.string(),
-        workFolder: z.string().optional()
+        workFolder: z.string(),
+        model: z.string().optional(),
+        session_id: z.string().optional()
       });
       
       // By default, Zod strips unknown keys
       const result = schema.parse({ 
-        prompt: 'test', 
+        prompt: 'test',
+        workFolder: '/tmp', 
         extraField: 'ignored' 
       });
       
-      expect(result).toEqual({ prompt: 'test' });
+      expect(result).toEqual({ prompt: 'test', workFolder: '/tmp' });
       expect(result).not.toHaveProperty('extraField');
     });
   });
@@ -195,7 +224,7 @@ describe('Argument Validation Tests', () => {
       ).rejects.toThrow();
     });
 
-    it('should handle empty string prompt', async () => {
+    it('should reject empty string prompt', async () => {
       mockHomedir.mockReturnValue('/home/user');
       mockExistsSync.mockReturnValue(true);
       setupServerMock();
@@ -212,29 +241,18 @@ describe('Argument Validation Tests', () => {
       
       const handler = callToolCall[1];
       
-      // Empty string is technically valid per schema
-      const mockProcess: any = {
-        stdout: { on: vi.fn() },
-        stderr: { on: vi.fn() },
-        on: vi.fn((event, cb) => {
-          if (event === 'close') setTimeout(() => cb(0), 10);
-        }),
-      };
-      
-      const spawn = (await import('node:child_process')).spawn;
-      vi.mocked(spawn).mockReturnValue(mockProcess);
-      
-      const result = await handler({
-        params: {
-          name: 'claude_code',
-          arguments: {
-            prompt: '', // Empty prompt
+      // Empty string prompt should be rejected
+      await expect(
+        handler({
+          params: {
+            name: 'claude_code',
+            arguments: {
+              prompt: '', // Empty prompt
+              workFolder: '/tmp'
+            }
           }
-        }
-      });
-      
-      // Should execute with empty prompt
-      expect(spawn).toHaveBeenCalled();
+        })
+      ).rejects.toThrow('Missing or invalid required parameter: prompt');
     });
   });
 });

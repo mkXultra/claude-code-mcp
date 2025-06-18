@@ -10,8 +10,19 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 vi.mock('node:child_process');
 vi.mock('node:fs');
 vi.mock('node:os');
+vi.mock('node:path', () => ({
+  resolve: vi.fn((path) => path),
+  join: vi.fn((...args) => args.join('/')),
+  isAbsolute: vi.fn((path) => path.startsWith('/'))
+}));
 vi.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
-  Server: vi.fn()
+  Server: vi.fn().mockImplementation(function(this: any) {
+    this.setRequestHandler = vi.fn();
+    this.connect = vi.fn();
+    this.close = vi.fn();
+    this.onerror = undefined;
+    return this;
+  }),
 }));
 
 vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
@@ -19,7 +30,8 @@ vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
   CallToolRequestSchema: { name: 'callTool' },
   ErrorCode: { 
     InternalError: 'InternalError',
-    MethodNotFound: 'MethodNotFound'
+    MethodNotFound: 'MethodNotFound',
+    InvalidParams: 'InvalidParams'
   },
   McpError: vi.fn().mockImplementation((code, message) => {
     const error = new Error(message);
@@ -39,20 +51,17 @@ describe('Error Handling Tests', () => {
 
   function setupServerMock() {
     errorHandler = null;
-    vi.mocked(Server).mockImplementation(() => {
-      const instance = {
-        setRequestHandler: vi.fn(),
-        connect: vi.fn(),
-        close: vi.fn(),
-        onerror: null
-      } as any;
-      Object.defineProperty(instance, 'onerror', {
+    vi.mocked(Server).mockImplementation(function(this: any) {
+      this.setRequestHandler = vi.fn();
+      this.connect = vi.fn();
+      this.close = vi.fn();
+      Object.defineProperty(this, 'onerror', {
         get() { return errorHandler; },
         set(handler) { errorHandler = handler; },
         enumerable: true,
         configurable: true
       });
-      return instance;
+      return this;
     });
   }
 
@@ -122,7 +131,7 @@ describe('Error Handling Tests', () => {
         }
       }
       
-      // Mock spawn 
+      // Mock spawn to return process without PID
       mockSpawn.mockImplementation(() => {
         const mockProcess = new EventEmitter() as any;
         mockProcess.stdout = new EventEmitter();
@@ -130,12 +139,7 @@ describe('Error Handling Tests', () => {
         
         mockProcess.stdout.on = vi.fn();
         mockProcess.stderr.on = vi.fn();
-        
-        setImmediate(() => {
-          const timeoutError: any = new Error('ETIMEDOUT');
-          timeoutError.code = 'ETIMEDOUT';
-          mockProcess.emit('error', timeoutError);
-        });
+        mockProcess.pid = undefined; // No PID to simulate process start failure
         
         return mockProcess;
       });
@@ -153,10 +157,10 @@ describe('Error Handling Tests', () => {
         });
         expect.fail('Should have thrown');
       } catch (err: any) {
-        // Check if McpError was called with the timeout message
+        // Check if McpError was called with the process start failure message
         expect(McpError).toHaveBeenCalledWith(
           'InternalError',
-          expect.stringMatching(/Claude CLI command timed out/)
+          'Failed to start Claude CLI process'
         );
       }
     });

@@ -54,23 +54,22 @@ describe('Claude Code Edge Cases', () => {
       ).rejects.toThrow();
     });
 
-    it('should handle invalid workFolder type', async () => {
-      // Server doesn't strictly validate the workFolder type in TypeScript
-      const response = await client.callTool('claude_code', {
-        prompt: 'Test prompt',
-        workFolder: 123, // Should be string but gets coerced
-      });
-      
-      expect(response).toBeTruthy();
+    it('should reject invalid workFolder type', async () => {
+      await expect(
+        client.callTool('claude_code', {
+          prompt: 'Test prompt',
+          workFolder: 123, // Should be string
+        })
+      ).rejects.toThrow(/workFolder/i);
     });
 
-    it('should handle empty prompt', async () => {
-      const response = await client.callTool('claude_code', {
-        prompt: '',
-        workFolder: testDir,
-      });
-      
-      expect(response).toBeTruthy();
+    it('should reject empty prompt', async () => {
+      await expect(
+        client.callTool('claude_code', {
+          prompt: '',
+          workFolder: testDir,
+        })
+      ).rejects.toThrow(/prompt/i);
     });
   });
 
@@ -126,14 +125,13 @@ describe('Claude Code Edge Cases', () => {
     it('should handle permission denied errors', async () => {
       const restrictedDir = '/root/restricted';
       
-      // This test actually verifies that the server gracefully handles
-      // non-existent directories by falling back to the default directory
-      const response = await client.callTool('claude_code', {
-        prompt: 'Test prompt',
-        workFolder: restrictedDir,
-      });
-      
-      expect(response).toBeTruthy();
+      // Non-existent directories now throw an error
+      await expect(
+        client.callTool('claude_code', {
+          prompt: 'Test prompt',
+          workFolder: restrictedDir,
+        })
+      ).rejects.toThrow(/does not exist/i);
     });
   });
 
@@ -170,13 +168,14 @@ describe('Claude Code Edge Cases', () => {
     it('should prevent path traversal attacks', async () => {
       const maliciousPath = join(testDir, '..', '..', 'etc', 'passwd');
       
-      // Server resolves paths safely
-      const response = await client.callTool('claude_code', {
-        prompt: 'Read file',
-        workFolder: maliciousPath,
-      });
-      
-      expect(response).toBeTruthy();
+      // Server resolves paths and checks existence
+      // The path /etc/passwd may exist but be a file, not a directory
+      await expect(
+        client.callTool('claude_code', {
+          prompt: 'Read file',
+          workFolder: maliciousPath,
+        })
+      ).rejects.toThrow(/(does not exist|ENOTDIR)/i);
     });
   });
 });

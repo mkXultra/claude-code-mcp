@@ -1,6 +1,6 @@
 # Release Process
 
-This document describes the release process for claude-code-mcp to ensure quality and prevent issues like the package.json import problem.
+This document describes the release process for @mkxultra/claude-code-mcp (forked from @steipete/claude-code-mcp) to ensure quality and prevent issues like the package.json import problem.
 
 ## Pre-release Testing
 
@@ -57,6 +57,14 @@ For critical fixes:
 - **Patch**: Bug fixes, documentation updates
 - **Minor**: New features, non-breaking changes
 - **Major**: Breaking changes, major refactors
+
+## Fork Information
+
+This is a fork of the original claude-code-mcp by Peter Steinberger. Major enhancements include:
+- File-based prompt support (`prompt_file` parameter)
+- Session management (`session_id` parameter for resuming sessions)
+- Required working directory specification (`workFolder` parameter)
+- Model selection support (`model` parameter for sonnet/opus)
 
 ## Testing Configurations
 

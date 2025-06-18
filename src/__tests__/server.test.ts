@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { resolve as pathResolve } from 'node:path';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { EventEmitter } from 'node:events';
@@ -10,13 +11,19 @@ import { EventEmitter } from 'node:events';
 vi.mock('node:child_process');
 vi.mock('node:fs');
 vi.mock('node:os');
+vi.mock('node:path', () => ({
+  resolve: vi.fn((path) => path),
+  join: vi.fn((...args) => args.join('/')),
+  isAbsolute: vi.fn((path) => path.startsWith('/'))
+}));
 vi.mock('@modelcontextprotocol/sdk/server/stdio.js');
 vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
   ListToolsRequestSchema: { name: 'listTools' },
   CallToolRequestSchema: { name: 'callTool' },
   ErrorCode: { 
     InternalError: 'InternalError',
-    MethodNotFound: 'MethodNotFound'
+    MethodNotFound: 'MethodNotFound',
+    InvalidParams: 'InvalidParams'
   },
   McpError: vi.fn().mockImplementation((code, message) => {
     const error = new Error(message);
@@ -25,13 +32,12 @@ vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
   })
 }));
 vi.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
-  Server: vi.fn().mockImplementation(function() {
-    return {
-      setRequestHandler: vi.fn(),
-      connect: vi.fn(),
-      close: vi.fn(),
-      onerror: undefined,
-    };
+  Server: vi.fn().mockImplementation(function(this: any) {
+    this.setRequestHandler = vi.fn();
+    this.connect = vi.fn();
+    this.close = vi.fn();
+    this.onerror = undefined;
+    return this;
   }),
 }));
 
@@ -44,6 +50,7 @@ vi.mock('../../package.json', () => ({
 const mockExistsSync = vi.mocked(existsSync);
 const mockSpawn = vi.mocked(spawn);
 const mockHomedir = vi.mocked(homedir);
+const mockPathResolve = vi.mocked(pathResolve);
 
 // Module loading will happen in tests
 
@@ -55,6 +62,7 @@ describe('ClaudeCodeServer Unit Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    vi.unmock('../server.js');
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     originalEnv = { ...process.env };
@@ -283,12 +291,13 @@ describe('ClaudeCodeServer Unit Tests', () => {
       mockExistsSync.mockReturnValue(true);
       
       // Set up Server mock before resetting modules
-      vi.mocked(Server).mockImplementation(() => ({
-        setRequestHandler: vi.fn(),
-        connect: vi.fn(),
-        close: vi.fn(),
-        onerror: undefined,
-      }) as any);
+      vi.mocked(Server).mockImplementation(function(this: any) {
+        this.setRequestHandler = vi.fn();
+        this.connect = vi.fn();
+        this.close = vi.fn();
+        this.onerror = undefined;
+        return this;
+      });
       
       const module = await import('../server.js');
       // @ts-ignore
@@ -307,12 +316,13 @@ describe('ClaudeCodeServer Unit Tests', () => {
       
       const { Server } = await import('@modelcontextprotocol/sdk/server/index.js');
       const mockSetRequestHandler = vi.fn();
-      vi.mocked(Server).mockImplementation(() => ({
-        setRequestHandler: mockSetRequestHandler,
-        connect: vi.fn(),
-        close: vi.fn(),
-        onerror: undefined,
-      }) as any);
+      vi.mocked(Server).mockImplementation(function(this: any) {
+        this.setRequestHandler = mockSetRequestHandler;
+        this.connect = vi.fn();
+        this.close = vi.fn();
+        this.onerror = undefined;
+        return this;
+      });
       
       const module = await import('../server.js');
       // @ts-ignore
@@ -329,20 +339,17 @@ describe('ClaudeCodeServer Unit Tests', () => {
       
       const { Server } = await import('@modelcontextprotocol/sdk/server/index.js');
       let errorHandler: any = null;
-      vi.mocked(Server).mockImplementation(() => {
-        const instance = {
-          setRequestHandler: vi.fn(),
-          connect: vi.fn(),
-          close: vi.fn(),
-          onerror: undefined
-        } as any;
-        Object.defineProperty(instance, 'onerror', {
+      vi.mocked(Server).mockImplementation(function(this: any) {
+        this.setRequestHandler = vi.fn();
+        this.connect = vi.fn();
+        this.close = vi.fn();
+        Object.defineProperty(this, 'onerror', {
           get() { return errorHandler; },
           set(handler) { errorHandler = handler; },
           enumerable: true,
           configurable: true
         });
-        return instance;
+        return this;
       });
       
       const module = await import('../server.js');
@@ -361,12 +368,13 @@ describe('ClaudeCodeServer Unit Tests', () => {
       mockExistsSync.mockReturnValue(true);
       
       // Set up Server mock first
-      vi.mocked(Server).mockImplementation(() => ({
-        setRequestHandler: vi.fn(),
-        connect: vi.fn(),
-        close: vi.fn(),
-        onerror: undefined,
-      }) as any);
+      vi.mocked(Server).mockImplementation(function(this: any) {
+        this.setRequestHandler = vi.fn();
+        this.connect = vi.fn();
+        this.close = vi.fn();
+        this.onerror = undefined;
+        return this;
+      });
       
       const module = await import('../server.js');
       // @ts-ignore
@@ -392,20 +400,17 @@ describe('ClaudeCodeServer Unit Tests', () => {
     let errorHandler: any = null;
     function setupServerMock() {
       errorHandler = null;
-      vi.mocked(Server).mockImplementation(() => {
-        const instance = {
-          setRequestHandler: vi.fn(),
-          connect: vi.fn(),
-          close: vi.fn(),
-          onerror: undefined
-        } as any;
-        Object.defineProperty(instance, 'onerror', {
+      vi.mocked(Server).mockImplementation(function(this: any) {
+        this.setRequestHandler = vi.fn();
+        this.connect = vi.fn();
+        this.close = vi.fn();
+        Object.defineProperty(this, 'onerror', {
           get() { return errorHandler; },
           set(handler) { errorHandler = handler; },
           enumerable: true,
           configurable: true
         });
-        return instance;
+        return this;
       });
     }
 
@@ -434,9 +439,12 @@ describe('ClaudeCodeServer Unit Tests', () => {
       const handler = listToolsCall[1];
       const result = await handler();
       
-      expect(result.tools).toHaveLength(1);
+      expect(result.tools).toHaveLength(4);
       expect(result.tools[0].name).toBe('claude_code');
       expect(result.tools[0].description).toContain('Claude Code Agent');
+      expect(result.tools[1].name).toBe('list_claude_processes');
+      expect(result.tools[2].name).toBe('get_claude_result');
+      expect(result.tools[3].name).toBe('kill_claude_process');
     });
 
     it('should handle CallToolRequest', async () => {
@@ -462,20 +470,18 @@ describe('ClaudeCodeServer Unit Tests', () => {
       
       // Create a mock process for the tool execution
       const mockProcess = new EventEmitter() as any;
+      mockProcess.pid = 12345;
       mockProcess.stdout = new EventEmitter();
       mockProcess.stderr = new EventEmitter();
-      mockProcess.stdout.on = vi.fn((event, handler) => {
-        if (event === 'data') mockProcess.stdout['data'] = handler;
-      });
-      mockProcess.stderr.on = vi.fn((event, handler) => {
-        if (event === 'data') mockProcess.stderr['data'] = handler;
-      });
+      mockProcess.stdout.on = vi.fn();
+      mockProcess.stderr.on = vi.fn();
+      mockProcess.kill = vi.fn();
       
       mockSpawn.mockReturnValue(mockProcess);
       
       // Test the handler
       const handler = callToolCall[1];
-      const promise = handler({
+      const result = await handler({
         params: {
           name: 'claude_code',
           arguments: {
@@ -485,28 +491,16 @@ describe('ClaudeCodeServer Unit Tests', () => {
         }
       });
       
-      // Simulate successful execution
-      setTimeout(() => {
-        mockProcess.stdout['data']('tool output');
-        mockProcess.emit('close', 0);
-      }, 10);
-      
-      const result = await promise;
+      // claude_code now returns PID immediately
       expect(result.content[0].type).toBe('text');
-      expect(result.content[0].text).toBe('tool output');
+      const response = JSON.parse(result.content[0].text);
+      expect(response.pid).toBe(12345);
+      expect(response.status).toBe('started');
     });
 
-    it('should handle non-existent workFolder', async () => {
+    it('should require workFolder parameter', async () => {
       mockHomedir.mockReturnValue('/home/user');
-      mockExistsSync.mockImplementation((path) => {
-        // Make the CLI path exist but the workFolder not exist
-        if (String(path).includes('.claude')) return true;
-        if (path === '/nonexistent') return false;
-        return false;
-      });
-      
-      // Enable debug mode to see warning messages
-      process.env.MCP_CLAUDE_DEBUG = 'true';
+      mockExistsSync.mockReturnValue(true);
       
       // Set up Server mock
       setupServerMock();
@@ -524,34 +518,237 @@ describe('ClaudeCodeServer Unit Tests', () => {
       
       const handler = callToolCall[1];
       
-      // Create mock response
+      // Test missing workFolder
+      await expect(handler({
+        params: {
+          name: 'claude_code',
+          arguments: {
+            prompt: 'test'
+          }
+        }
+      })).rejects.toThrow('Missing or invalid required parameter: workFolder');
+    });
+
+    it('should handle non-existent workFolder', async () => {
+      mockHomedir.mockReturnValue('/home/user');
+      mockExistsSync.mockImplementation((path) => {
+        // Make the CLI path exist but the workFolder not exist
+        if (String(path).includes('.claude')) return true;
+        if (path === '/nonexistent') return false;
+        return false;
+      });
+      
+      // Set up Server mock
+      setupServerMock();
+      
+      const module = await import('../server.js');
+      // @ts-ignore
+      const { ClaudeCodeServer } = module;
+      const server = new ClaudeCodeServer();
+      const mockServerInstance = vi.mocked(Server).mock.results[0].value;
+      
+      // Find the CallToolRequest handler
+      const callToolCall = mockServerInstance.setRequestHandler.mock.calls.find(
+        (call: any[]) => call[0].name === 'callTool'
+      );
+      
+      const handler = callToolCall[1];
+      
+      // Should throw error for non-existent workFolder
+      await expect(
+        handler({
+          params: {
+            name: 'claude_code',
+            arguments: {
+              prompt: 'test',
+              workFolder: '/nonexistent'
+            }
+          }
+        })
+      ).rejects.toThrow('Working folder does not exist');
+    });
+
+    it('should handle session_id parameter', async () => {
+      mockHomedir.mockReturnValue('/home/user');
+      mockExistsSync.mockReturnValue(true);
+      
+      // Set up Server mock
+      setupServerMock();
+      
+      const module = await import('../server.js');
+      // @ts-ignore
+      const { ClaudeCodeServer } = module;
+      const server = new ClaudeCodeServer();
+      const mockServerInstance = vi.mocked(Server).mock.results[0].value;
+      
+      // Find the CallToolRequest handler
+      const callToolCall = mockServerInstance.setRequestHandler.mock.calls.find(
+        (call: any[]) => call[0].name === 'callTool'
+      );
+      
+      const handler = callToolCall[1];
+      
+      // Create mock process
       const mockProcess = new EventEmitter() as any;
+      mockProcess.pid = 12347;
       mockProcess.stdout = new EventEmitter();
       mockProcess.stderr = new EventEmitter();
       mockProcess.stdout.on = vi.fn();
       mockProcess.stderr.on = vi.fn();
+      mockProcess.kill = vi.fn();
       mockSpawn.mockReturnValue(mockProcess);
       
-      const promise = handler({
+      const result = await handler({
         params: {
           name: 'claude_code',
           arguments: {
-            prompt: 'test',
-            workFolder: '/nonexistent'
+            prompt: 'test prompt',
+            workFolder: '/tmp',
+            session_id: 'test-session-123'
           }
         }
       });
       
-      // Simulate execution
-      setTimeout(() => {
-        mockProcess.emit('close', 0);
-      }, 10);
-      
-      await promise;
-      
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[Warning] Specified workFolder does not exist: /nonexistent.')
+      // Verify spawn was called with -r flag
+      expect(mockSpawn).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.arrayContaining(['-r', 'test-session-123', '-p', 'test prompt']),
+        expect.any(Object)
       );
+    });
+
+    it('should handle prompt_file parameter', async () => {
+      mockHomedir.mockReturnValue('/home/user');
+      mockExistsSync.mockImplementation((path) => {
+        if (String(path).includes('.claude')) return true;
+        if (path === '/tmp') return true;
+        if (path === '/tmp/prompt.txt') return true;
+        return false;
+      });
+      
+      // Mock readFileSync
+      const readFileSyncMock = vi.fn().mockReturnValue('Content from file');
+      vi.doMock('node:fs', () => ({
+        existsSync: mockExistsSync,
+        readFileSync: readFileSyncMock
+      }));
+      
+      // Set up Server mock
+      setupServerMock();
+      
+      const module = await import('../server.js');
+      // @ts-ignore
+      const { ClaudeCodeServer } = module;
+      const server = new ClaudeCodeServer();
+      const mockServerInstance = vi.mocked(Server).mock.results[0].value;
+      
+      // Find the CallToolRequest handler
+      const callToolCall = mockServerInstance.setRequestHandler.mock.calls.find(
+        (call: any[]) => call[0].name === 'callTool'
+      );
+      
+      const handler = callToolCall[1];
+      
+      // Create mock process
+      const mockProcess = new EventEmitter() as any;
+      mockProcess.pid = 12348;
+      mockProcess.stdout = new EventEmitter();
+      mockProcess.stderr = new EventEmitter();
+      mockProcess.stdout.on = vi.fn();
+      mockProcess.stderr.on = vi.fn();
+      mockProcess.kill = vi.fn();
+      mockSpawn.mockReturnValue(mockProcess);
+      
+      const result = await handler({
+        params: {
+          name: 'claude_code',
+          arguments: {
+            prompt_file: '/tmp/prompt.txt',
+            workFolder: '/tmp'
+          }
+        }
+      });
+      
+      // Verify file was read and spawn was called with content
+      expect(mockSpawn).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.arrayContaining(['-p', 'Content from file']),
+        expect.any(Object)
+      );
+    });
+
+    it('should reject when both prompt and prompt_file are provided', async () => {
+      mockHomedir.mockReturnValue('/home/user');
+      mockExistsSync.mockReturnValue(true);
+      
+      // Set up Server mock
+      setupServerMock();
+      
+      const module = await import('../server.js');
+      // @ts-ignore
+      const { ClaudeCodeServer } = module;
+      const server = new ClaudeCodeServer();
+      const mockServerInstance = vi.mocked(Server).mock.results[0].value;
+      
+      // Find the CallToolRequest handler
+      const callToolCall = mockServerInstance.setRequestHandler.mock.calls.find(
+        (call: any[]) => call[0].name === 'callTool'
+      );
+      
+      const handler = callToolCall[1];
+      
+      // Test both parameters provided
+      try {
+        await handler({
+          params: {
+            name: 'claude_code',
+            arguments: {
+              prompt: 'test prompt',
+              prompt_file: '/tmp/prompt.txt',
+              workFolder: '/tmp'
+            }
+          }
+        });
+        expect.fail('Should have thrown an error');
+      } catch (error: any) {
+        expect(error.message).toContain('Cannot specify both prompt and prompt_file');
+      }
+    });
+
+    it('should reject when neither prompt nor prompt_file are provided', async () => {
+      mockHomedir.mockReturnValue('/home/user');
+      mockExistsSync.mockReturnValue(true);
+      
+      // Set up Server mock
+      setupServerMock();
+      
+      const module = await import('../server.js');
+      // @ts-ignore
+      const { ClaudeCodeServer } = module;
+      const server = new ClaudeCodeServer();
+      const mockServerInstance = vi.mocked(Server).mock.results[0].value;
+      
+      // Find the CallToolRequest handler
+      const callToolCall = mockServerInstance.setRequestHandler.mock.calls.find(
+        (call: any[]) => call[0].name === 'callTool'
+      );
+      
+      const handler = callToolCall[1];
+      
+      // Test neither parameter provided
+      try {
+        await handler({
+          params: {
+            name: 'claude_code',
+            arguments: {
+              workFolder: '/tmp'
+            }
+          }
+        });
+        expect.fail('Should have thrown an error');
+      } catch (error: any) {
+        expect(error.message).toContain('Either prompt or prompt_file must be provided');
+      }
     });
   });
 });

@@ -2,7 +2,7 @@
 
 <img src="assets/claude_code_mcp_logo.png" alt="Claude Code MCP Logo">
 
-[![npm package](https://img.shields.io/npm/v/@steipete/claude-code-mcp)](https://www.npmjs.com/package/@steipete/claude-code-mcp)
+[![npm package](https://img.shields.io/npm/v/@mkxultra/claude-code-mcp)](https://www.npmjs.com/package/@mkxultra/claude-code-mcp)
 [![View changelog](https://img.shields.io/badge/Explore%20Changelog-brightgreen)](/CHANGELOG.md)
 
 An MCP (Model Context Protocol) server that allows running Claude Code in one-shot mode with permissions bypassed automatically.
@@ -61,24 +61,32 @@ This MCP server provides one tool that can be used by LLMs to interact with Clau
 
 The recommended way to use this server is by installing it by using `npx`.
 
+### Using npx in your MCP configuration:
+
 ```json
     "claude-code-mcp": {
       "command": "npx",
       "args": [
         "-y",
-        "@steipete/claude-code-mcp@latest"
+        "@mkxultra/claude-code-mcp@latest"
       ]
     },
 ```
 
-To use a custom Claude CLI binary name, you can specify the environment variable:
+### Using Claude CLI mcp add command:
+
+```bash
+claude mcp add ccm '{"name":"ccm","command":"npx","args":["-y","@mkxultra/claude-code-mcp@latest"]}'
+```
+
+### With custom Claude CLI binary:
 
 ```json
     "claude-code-mcp": {
       "command": "npx",
       "args": [
         "-y",
-        "@steipete/claude-code-mcp@latest"
+        "@mkxultra/claude-code-mcp@latest"
       ],
       "env": {
         "CLAUDE_CLI_NAME": "claude-custom"
@@ -138,16 +146,55 @@ This server exposes one primary tool:
 Executes a prompt directly using the Claude Code CLI with `--dangerously-skip-permissions`.
 
 **Arguments:**
-- `prompt` (string, required): The prompt to send to Claude Code.
-- `options` (object, optional):
-  - `tools` (array of strings, optional): Specific Claude tools to enable (e.g., `Bash`, `Read`, `Write`). Common tools are enabled by default.
+- `prompt` (string, optional): The prompt to send to Claude Code. Either `prompt` or `prompt_file` is required.
+- `prompt_file` (string, optional): Path to a file containing the prompt. Either `prompt` or `prompt_file` is required. Can be absolute path or relative to `workFolder`.
+- `workFolder` (string, required): The working directory for the Claude CLI execution. Must be an absolute path.
+- `model` (string, optional): The Claude model to use: "sonnet" or "opus". If not specified, uses the default model.
+- `session_id` (string, optional): Optional session ID to resume a previous Claude session. If provided, Claude CLI will be started with -r flag.
+
+**Note**: You must provide either `prompt` or `prompt_file`, but not both. If both are provided, an error will be returned.
 
 **Example MCP Request:**
 ```json
 {
   "toolName": "claude_code:claude_code",
   "arguments": {
-    "prompt": "Refactor the function foo in main.py to be async."
+    "prompt": "Refactor the function foo in main.py to be async.",
+    "workFolder": "/Users/username/my_project"
+  }
+}
+```
+
+**Example with session resumption:**
+```json
+{
+  "toolName": "claude_code:claude_code",
+  "arguments": {
+    "prompt": "Continue working on the previous task",
+    "workFolder": "/Users/username/my_project",
+    "session_id": "01234567-89ab-cdef-0123-456789abcdef"
+  }
+}
+```
+
+**Example with prompt file:**
+```json
+{
+  "toolName": "claude_code:claude_code",
+  "arguments": {
+    "prompt_file": "/Users/username/prompts/complex_task.txt",
+    "workFolder": "/Users/username/my_project"
+  }
+}
+```
+
+**Example with relative prompt file:**
+```json
+{
+  "toolName": "claude_code:claude_code",
+  "arguments": {
+    "prompt_file": "./prompts/template.txt",
+    "workFolder": "/Users/username/my_project"
   }
 }
 ```
@@ -275,7 +322,7 @@ These can be set in your shell environment or within the `env` block of your `mc
 
 Contributions are welcome! Please refer to the [Local Installation & Development Setup Guide](./docs/local_install.md) for details on setting up your environment.
 
-Submit issues and pull requests to the [GitHub repository](https://github.com/steipete/claude-code-mcp).
+Submit issues and pull requests to the [GitHub repository](https://github.com/mkXultra/claude-code-mcp).
 
 ## License
 

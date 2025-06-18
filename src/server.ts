@@ -8,12 +8,11 @@ import {
   McpError,
   type ServerResult,
 } from '@modelcontextprotocol/sdk/types.js';
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { spawn, ChildProcess } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve as pathResolve } from 'node:path';
 import * as path from 'path';
-import { readFileSync } from 'node:fs';
 
 // Server version - update this when releasing new versions
 const SERVER_VERSION = "1.10.12";
@@ -26,6 +25,23 @@ let isFirstToolUse = true;
 
 // Capture server startup time when the module loads
 const serverStartupTime = new Date().toISOString();
+
+// Process tracking
+interface ClaudeProcess {
+  pid: number;
+  process: ChildProcess;
+  prompt: string;
+  workFolder: string;
+  model?: string;
+  startTime: string;
+  stdout: string;
+  stderr: string;
+  status: 'running' | 'completed' | 'failed';
+  exitCode?: number;
+}
+
+// Global process manager
+const processManager = new Map<number, ClaudeProcess>();
 
 // Dedicated debug logging function
 export function debugLog(message?: any, ...optionalParams: any[]): void {
@@ -86,8 +102,11 @@ export function findClaudeCli(): string {
  * Interface for Claude Code tool arguments
  */
 interface ClaudeCodeArgs {
-  prompt: string;
-  workFolder?: string;
+  prompt?: string;
+  prompt_file?: string;
+  workFolder: string;
+  model?: string;
+  session_id?: string;
 }
 
 // Ensure spawnAsync is defined correctly *before* the class
@@ -142,8 +161,9 @@ export async function spawnAsync(command: string, args: string[], options?: { ti
  */
 export class ClaudeCodeServer {
   private server: Server;
-  private claudeCliPath: string; // This now holds either a full path or just 'claude'
-  private packageVersion: string; // Add packageVersion property
+  private claudeCliPath: string;
+  private sigintHandler?: () => Promise<void>;
+  private packageVersion: string;
 
   constructor() {
     // Use the simplified findClaudeCli function
@@ -166,10 +186,11 @@ export class ClaudeCodeServer {
     this.setupToolHandlers();
 
     this.server.onerror = (error) => console.error('[Error]', error);
-    process.on('SIGINT', async () => {
+    this.sigintHandler = async () => {
       await this.server.close();
       process.exit(0);
-    });
+    };
+    process.on('SIGINT', this.sigintHandler);
   }
 
   /**
@@ -181,38 +202,24 @@ export class ClaudeCodeServer {
       tools: [
         {
           name: 'claude_code',
-          description: `Claude Code Agent: Your versatile multi-modal assistant for code, file, Git, and terminal operations via Claude CLI. Use \`workFolder\` for contextual execution.
+          description: `Claude Code Agent: Starts a Claude CLI process in the background and returns a PID immediately. Use list_claude_processes and get_claude_result to monitor progress.
 
 • File ops: Create, read, (fuzzy) edit, move, copy, delete, list files, analyze/ocr images, file content analysis
-    └─ e.g., "Create /tmp/log.txt with 'system boot'", "Edit main.py to replace 'debug_mode = True' with 'debug_mode = False'", "List files in /src", "Move a specific section somewhere else"
-
 • Code: Generate / analyse / refactor / fix
-    └─ e.g. "Generate Python to parse CSV→JSON", "Find bugs in my_script.py"
-
 • Git: Stage ▸ commit ▸ push ▸ tag (any workflow)
-    └─ "Commit '/workspace/src/main.java' with 'feat: user auth' to develop."
-
 • Terminal: Run any CLI cmd or open URLs
-    └─ "npm run build", "Open https://developer.mozilla.org"
-
 • Web search + summarise content on-the-fly
+• Multi-step workflows & GitHub integration
 
-• Multi-step workflows  (Version bumps, changelog updates, release tagging, etc.)
+**IMPORTANT**: This tool now returns immediately with a PID. Use other tools to check status and get results.
 
-• GitHub integration  Create PRs, check CI status
-
-• Confused or stuck on an issue? Ask Claude Code for a second opinion, it might surprise you!
+**Prompt input**: You must provide EITHER prompt (string) OR prompt_file (file path), but not both.
 
 **Prompt tips**
-
-1. Be concise, explicit & step-by-step for complex tasks. No need for niceties, this is a tool to get things done.
-2. For multi-line text, write it to a temporary file in the project root, use that file, then delete it.
-3. If you get a timeout, split the task into smaller steps.
-4. **Seeking a second opinion/analysis**: If you're stuck or want advice, you can ask \`claude_code\` to analyze a problem and suggest solutions. Clearly state in your prompt that you are looking for analysis only and no actual file modifications should be made.
-5. If workFolder is set to the project path, there is no need to repeat that path in the prompt and you can use relative paths for files.
-6. Claude Code is really good at complex multi-step file operations and refactorings and faster than your native edit features.
-7. Combine file operations, README updates, and Git commands in a sequence.
-8. Claude can do much more, just ask it!
+1. Be concise, explicit & step-by-step for complex tasks.
+2. Check process status with list_claude_processes
+3. Get results with get_claude_result using the returned PID
+4. Kill long-running processes with kill_claude_process if needed
 
         `,
           inputSchema: {
@@ -220,14 +227,62 @@ export class ClaudeCodeServer {
             properties: {
               prompt: {
                 type: 'string',
-                description: 'The detailed natural language prompt for Claude to execute.',
+                description: 'The detailed natural language prompt for Claude to execute. Either this or prompt_file is required.',
+              },
+              prompt_file: {
+                type: 'string',
+                description: 'Path to a file containing the prompt. Either this or prompt is required. Must be an absolute path or relative to workFolder.',
               },
               workFolder: {
                 type: 'string',
-                description: 'Mandatory when using file operations or referencing any file. The working directory for the Claude CLI execution. Must be an absolute path.',
+                description: 'The working directory for the Claude CLI execution. Must be an absolute path.',
+              },
+              model: {
+                type: 'string',
+                description: 'The Claude model to use: "sonnet" or "opus". If not specified, uses the default model.',
+              },
+              session_id: {
+                type: 'string',
+                description: 'Optional session ID to resume a previous Claude session. If provided, Claude CLI will be started with -r flag.',
               },
             },
-            required: ['prompt'],
+            required: ['workFolder'],
+          },
+        },
+        {
+          name: 'list_claude_processes',
+          description: 'List all running and completed Claude CLI processes with their status, PID, and basic info.',
+          inputSchema: {
+            type: 'object',
+            properties: {},
+          },
+        },
+        {
+          name: 'get_claude_result',
+          description: 'Get the current output and status of a Claude CLI process by PID. Returns the JSON output from Claude CLI including session_id, along with process metadata.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              pid: {
+                type: 'number',
+                description: 'The process ID returned by claude_code tool.',
+              },
+            },
+            required: ['pid'],
+          },
+        },
+        {
+          name: 'kill_claude_process',
+          description: 'Terminate a running Claude CLI process by PID.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              pid: {
+                type: 'number',
+                description: 'The process ID to terminate.',
+              },
+            },
+            required: ['pid'],
           },
         }
       ],
@@ -239,93 +294,308 @@ export class ClaudeCodeServer {
     this.server.setRequestHandler(CallToolRequestSchema, async (args, call): Promise<ServerResult> => {
       debugLog('[Debug] Handling CallToolRequest:', args);
 
-      // Correctly access toolName from args.params.name
       const toolName = args.params.name;
-      if (toolName !== 'claude_code') {
-        // ErrorCode.ToolNotFound should be ErrorCode.MethodNotFound as per SDK for tools
-        throw new McpError(ErrorCode.MethodNotFound, `Tool ${toolName} not found`);
-      }
+      const toolArguments = args.params.arguments || {};
 
-      // Robustly access prompt from args.params.arguments
-      const toolArguments = args.params.arguments;
-      let prompt: string;
-
-      if (
-        toolArguments &&
-        typeof toolArguments === 'object' &&
-        'prompt' in toolArguments &&
-        typeof toolArguments.prompt === 'string'
-      ) {
-        prompt = toolArguments.prompt;
-      } else {
-        throw new McpError(ErrorCode.InvalidParams, 'Missing or invalid required parameter: prompt (must be an object with a string "prompt" property) for claude_code tool');
-      }
-
-      // Determine the working directory
-      let effectiveCwd = homedir(); // Default CWD is user's home directory
-
-      // Check if workFolder is provided in the tool arguments
-      if (toolArguments.workFolder && typeof toolArguments.workFolder === 'string') {
-        const resolvedCwd = pathResolve(toolArguments.workFolder);
-        debugLog(`[Debug] Specified workFolder: ${toolArguments.workFolder}, Resolved to: ${resolvedCwd}`);
-
-        // Check if the resolved path exists
-        if (existsSync(resolvedCwd)) {
-          effectiveCwd = resolvedCwd;
-          debugLog(`[Debug] Using workFolder as CWD: ${effectiveCwd}`);
-        } else {
-          debugLog(`[Warning] Specified workFolder does not exist: ${resolvedCwd}. Using default: ${effectiveCwd}`);
-        }
-      } else {
-        debugLog(`[Debug] No workFolder provided, using default CWD: ${effectiveCwd}`);
-      }
-
-      try {
-        debugLog(`[Debug] Attempting to execute Claude CLI with prompt: "${prompt}" in CWD: "${effectiveCwd}"`);
-
-        // Print tool info on first use
-        if (isFirstToolUse) {
-          const versionInfo = `claude_code v${SERVER_VERSION} started at ${serverStartupTime}`;
-          console.error(versionInfo);
-          isFirstToolUse = false;
-        }
-
-        const claudeProcessArgs = ['--dangerously-skip-permissions', '-p', prompt];
-        debugLog(`[Debug] Invoking Claude CLI: ${this.claudeCliPath} ${claudeProcessArgs.join(' ')}`);
-
-        const { stdout, stderr } = await spawnAsync(
-          this.claudeCliPath, // Run the Claude CLI directly
-          claudeProcessArgs, // Pass the arguments
-          { timeout: executionTimeoutMs, cwd: effectiveCwd }
-        );
-
-        debugLog('[Debug] Claude CLI stdout:', stdout.trim());
-        if (stderr) {
-          debugLog('[Debug] Claude CLI stderr:', stderr.trim());
-        }
-
-        // Return stdout content, even if there was stderr, as claude-cli might output main result to stdout.
-        return { content: [{ type: 'text', text: stdout }] };
-
-      } catch (error: any) {
-        debugLog('[Error] Error executing Claude CLI:', error);
-        let errorMessage = error.message || 'Unknown error';
-        // Attempt to include stderr and stdout from the error object if spawnAsync attached them
-        if (error.stderr) {
-          errorMessage += `\nStderr: ${error.stderr}`;
-        }
-        if (error.stdout) {
-          errorMessage += `\nStdout: ${error.stdout}`;
-        }
-
-        if (error.signal === 'SIGTERM' || (error.message && error.message.includes('ETIMEDOUT')) || (error.code === 'ETIMEDOUT')) {
-          // Reverting to InternalError due to lint issues, but with a specific timeout message.
-          throw new McpError(ErrorCode.InternalError, `Claude CLI command timed out after ${executionTimeoutMs / 1000}s. Details: ${errorMessage}`);
-        }
-        // ErrorCode.ToolCallFailed should be ErrorCode.InternalError or a more specific execution error if available
-        throw new McpError(ErrorCode.InternalError, `Claude CLI execution failed: ${errorMessage}`);
+      switch (toolName) {
+        case 'claude_code':
+          return this.handleClaudeCode(toolArguments);
+        case 'list_claude_processes':
+          return this.handleListProcesses();
+        case 'get_claude_result':
+          return this.handleGetResult(toolArguments);
+        case 'kill_claude_process':
+          return this.handleKillProcess(toolArguments);
+        default:
+          throw new McpError(ErrorCode.MethodNotFound, `Tool ${toolName} not found`);
       }
     });
+  }
+
+  /**
+   * Handle claude_code tool - starts process and returns PID immediately
+   */
+  private async handleClaudeCode(toolArguments: any): Promise<ServerResult> {
+    // Validate workFolder is required
+    if (!toolArguments.workFolder || typeof toolArguments.workFolder !== 'string') {
+      throw new McpError(ErrorCode.InvalidParams, 'Missing or invalid required parameter: workFolder');
+    }
+
+    // Validate that either prompt or prompt_file is provided
+    const hasPrompt = toolArguments.prompt && typeof toolArguments.prompt === 'string' && toolArguments.prompt.trim() !== '';
+    const hasPromptFile = toolArguments.prompt_file && typeof toolArguments.prompt_file === 'string' && toolArguments.prompt_file.trim() !== '';
+
+    if (!hasPrompt && !hasPromptFile) {
+      throw new McpError(ErrorCode.InvalidParams, 'Either prompt or prompt_file must be provided');
+    }
+
+    if (hasPrompt && hasPromptFile) {
+      throw new McpError(ErrorCode.InvalidParams, 'Cannot specify both prompt and prompt_file. Please use only one.');
+    }
+
+    // Determine the prompt to use
+    let prompt: string;
+    if (hasPrompt) {
+      prompt = toolArguments.prompt;
+    } else {
+      // Read prompt from file
+      const promptFilePath = path.isAbsolute(toolArguments.prompt_file) 
+        ? toolArguments.prompt_file 
+        : pathResolve(toolArguments.workFolder, toolArguments.prompt_file);
+      
+      if (!existsSync(promptFilePath)) {
+        throw new McpError(ErrorCode.InvalidParams, `Prompt file does not exist: ${promptFilePath}`);
+      }
+      
+      try {
+        prompt = readFileSync(promptFilePath, 'utf-8');
+      } catch (error: any) {
+        throw new McpError(ErrorCode.InvalidParams, `Failed to read prompt file: ${error.message}`);
+      }
+    }
+    
+    // Determine working directory
+    const resolvedCwd = pathResolve(toolArguments.workFolder);
+    if (!existsSync(resolvedCwd)) {
+      throw new McpError(ErrorCode.InvalidParams, `Working folder does not exist: ${toolArguments.workFolder}`);
+    }
+    const effectiveCwd = resolvedCwd;
+
+    // Print version on first use
+    if (isFirstToolUse) {
+      console.error(`claude_code v${SERVER_VERSION} started at ${serverStartupTime}`);
+      isFirstToolUse = false;
+    }
+
+    // Build command arguments
+    const claudeProcessArgs = ['--dangerously-skip-permissions', '--output-format', 'json'];
+    
+    // Add session_id if provided
+    if (toolArguments.session_id && typeof toolArguments.session_id === 'string') {
+      claudeProcessArgs.push('-r', toolArguments.session_id);
+    }
+    
+    claudeProcessArgs.push('-p', prompt);
+    if (toolArguments.model && typeof toolArguments.model === 'string') {
+      claudeProcessArgs.push('--model', toolArguments.model);
+    }
+
+    // Spawn process without waiting
+    const childProcess = spawn(this.claudeCliPath, claudeProcessArgs, {
+      cwd: effectiveCwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: false
+    });
+
+    const pid = childProcess.pid;
+    if (!pid) {
+      throw new McpError(ErrorCode.InternalError, 'Failed to start Claude CLI process');
+    }
+
+    // Create process tracking entry
+    const processEntry: ClaudeProcess = {
+      pid,
+      process: childProcess,
+      prompt,
+      workFolder: effectiveCwd,
+      model: toolArguments.model,
+      startTime: new Date().toISOString(),
+      stdout: '',
+      stderr: '',
+      status: 'running'
+    };
+
+    // Track the process
+    processManager.set(pid, processEntry);
+
+    // Set up output collection
+    childProcess.stdout.on('data', (data) => {
+      const entry = processManager.get(pid);
+      if (entry) {
+        entry.stdout += data.toString();
+      }
+    });
+
+    childProcess.stderr.on('data', (data) => {
+      const entry = processManager.get(pid);
+      if (entry) {
+        entry.stderr += data.toString();
+      }
+    });
+
+    childProcess.on('close', (code) => {
+      const entry = processManager.get(pid);
+      if (entry) {
+        entry.status = code === 0 ? 'completed' : 'failed';
+        entry.exitCode = code !== null ? code : undefined;
+      }
+    });
+
+    childProcess.on('error', (error) => {
+      const entry = processManager.get(pid);
+      if (entry) {
+        entry.status = 'failed';
+        entry.stderr += `\nProcess error: ${error.message}`;
+      }
+    });
+
+    // Return PID immediately
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({ 
+          pid, 
+          status: 'started',
+          message: 'Claude Code process started successfully'
+        }, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * Handle list_claude_processes tool
+   */
+  private async handleListProcesses(): Promise<ServerResult> {
+    const processes: any[] = [];
+    
+    for (const [pid, process] of processManager.entries()) {
+      const processInfo: any = {
+        pid,
+        status: process.status,
+        startTime: process.startTime,
+        prompt: process.prompt.substring(0, 100) + (process.prompt.length > 100 ? '...' : ''),
+        workFolder: process.workFolder,
+        model: process.model,
+        exitCode: process.exitCode
+      };
+
+      // Try to extract session_id from JSON output if available
+      if (process.stdout) {
+        try {
+          const claudeOutput = JSON.parse(process.stdout);
+          if (claudeOutput.session_id) {
+            processInfo.session_id = claudeOutput.session_id;
+          }
+        } catch (e) {
+          // Ignore parsing errors
+        }
+      }
+
+      processes.push(processInfo);
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(processes, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * Handle get_claude_result tool
+   */
+  private async handleGetResult(toolArguments: any): Promise<ServerResult> {
+    if (!toolArguments.pid || typeof toolArguments.pid !== 'number') {
+      throw new McpError(ErrorCode.InvalidParams, 'Missing or invalid required parameter: pid');
+    }
+
+    const pid = toolArguments.pid;
+    const process = processManager.get(pid);
+
+    if (!process) {
+      throw new McpError(ErrorCode.InvalidParams, `Process with PID ${pid} not found`);
+    }
+
+    // Try to parse stdout as JSON from Claude CLI
+    let claudeOutput: any = null;
+    if (process.stdout) {
+      try {
+        claudeOutput = JSON.parse(process.stdout);
+      } catch (e) {
+        // If parsing fails, return raw output
+        debugLog(`[Debug] Failed to parse Claude CLI output as JSON: ${e}`);
+      }
+    }
+
+    // Construct response with Claude's JSON output and process metadata
+    const response: any = {
+      pid,
+      status: process.status,
+      exitCode: process.exitCode,
+      startTime: process.startTime,
+      workFolder: process.workFolder,
+      prompt: process.prompt,
+      model: process.model
+    };
+
+    // If we have valid JSON output from Claude, include it
+    if (claudeOutput) {
+      response.claudeOutput = claudeOutput;
+      // Extract session_id if available
+      if (claudeOutput.session_id) {
+        response.session_id = claudeOutput.session_id;
+      }
+    } else {
+      // Fallback to raw output
+      response.stdout = process.stdout;
+      response.stderr = process.stderr;
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(response, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * Handle kill_claude_process tool
+   */
+  private async handleKillProcess(toolArguments: any): Promise<ServerResult> {
+    if (!toolArguments.pid || typeof toolArguments.pid !== 'number') {
+      throw new McpError(ErrorCode.InvalidParams, 'Missing or invalid required parameter: pid');
+    }
+
+    const pid = toolArguments.pid;
+    const processEntry = processManager.get(pid);
+
+    if (!processEntry) {
+      throw new McpError(ErrorCode.InvalidParams, `Process with PID ${pid} not found`);
+    }
+
+    if (processEntry.status !== 'running') {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            pid,
+            status: processEntry.status,
+            message: 'Process already terminated'
+          }, null, 2)
+        }]
+      };
+    }
+
+    try {
+      processEntry.process.kill('SIGTERM');
+      processEntry.status = 'failed';
+      processEntry.stderr += '\nProcess terminated by user';
+      
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            pid,
+            status: 'terminated',
+            message: 'Process terminated successfully'
+          }, null, 2)
+        }]
+      };
+    } catch (error: any) {
+      throw new McpError(ErrorCode.InternalError, `Failed to terminate process: ${error.message}`);
+    }
   }
 
   /**
@@ -336,6 +606,16 @@ export class ClaudeCodeServer {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error('Claude Code MCP server running on stdio');
+  }
+
+  /**
+   * Clean up resources (for testing)
+   */
+  async cleanup(): Promise<void> {
+    if (this.sigintHandler) {
+      process.removeListener('SIGINT', this.sigintHandler);
+    }
+    await this.server.close();
   }
 }
 

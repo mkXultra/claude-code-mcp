@@ -43,8 +43,9 @@ describe('Claude Code MCP E2E Tests', () => {
     it('should register claude_code tool', async () => {
       const tools = await client.listTools();
       
-      expect(tools).toHaveLength(1);
-      expect(tools[0]).toEqual({
+      expect(tools).toHaveLength(4);
+      const claudeCodeTool = tools.find((t: any) => t.name === 'claude_code');
+      expect(claudeCodeTool).toEqual({
         name: 'claude_code',
         description: expect.stringContaining('Claude Code Agent'),
         inputSchema: {
@@ -52,16 +53,33 @@ describe('Claude Code MCP E2E Tests', () => {
           properties: {
             prompt: {
               type: 'string',
-              description: 'The detailed natural language prompt for Claude to execute.',
+              description: expect.stringContaining('Either this or prompt_file is required'),
+            },
+            prompt_file: {
+              type: 'string',
+              description: expect.stringContaining('Path to a file containing the prompt'),
             },
             workFolder: {
               type: 'string',
               description: expect.stringContaining('working directory'),
             },
+            model: {
+              type: 'string',
+              description: expect.stringContaining('Claude model'),
+            },
+            session_id: {
+              type: 'string',
+              description: expect.stringContaining('session ID'),
+            },
           },
-          required: ['prompt'],
+          required: ['workFolder'],
         },
       });
+      
+      // Verify other tools exist
+      expect(tools.some((t: any) => t.name === 'list_claude_processes')).toBe(true);
+      expect(tools.some((t: any) => t.name === 'get_claude_result')).toBe(true);
+      expect(tools.some((t: any) => t.name === 'kill_claude_process')).toBe(true);
     });
   });
 
@@ -78,22 +96,30 @@ describe('Claude Code MCP E2E Tests', () => {
       }]);
     });
 
-    it('should handle errors gracefully', async () => {
-      // The mock should trigger an error
-      await expect(
-        client.callTool('claude_code', {
-          prompt: 'error',
-          workFolder: testDir,
-        })
-      ).rejects.toThrow();
+    it('should handle process management correctly', async () => {
+      // claude_code now returns a PID immediately
+      const response = await client.callTool('claude_code', {
+        prompt: 'error',
+        workFolder: testDir,
+      });
+      
+      expect(response).toEqual([{
+        type: 'text',
+        text: expect.stringContaining('pid'),
+      }]);
+      
+      // Extract PID from response
+      const responseText = response[0].text;
+      const pidMatch = responseText.match(/"pid":\s*(\d+)/); 
+      expect(pidMatch).toBeTruthy();
     });
 
-    it('should use default working directory when not specified', async () => {
-      const response = await client.callTool('claude_code', {
-        prompt: 'List files in current directory',
-      });
-
-      expect(response).toBeTruthy();
+    it('should reject missing workFolder', async () => {
+      await expect(
+        client.callTool('claude_code', {
+          prompt: 'List files in current directory',
+        })
+      ).rejects.toThrow(/workFolder/i);
     });
   });
 
@@ -107,15 +133,15 @@ describe('Claude Code MCP E2E Tests', () => {
       expect(response).toBeTruthy();
     });
 
-    it('should use default directory for non-existent working directory', async () => {
+    it('should reject non-existent working directory', async () => {
       const nonExistentDir = join(testDir, 'non-existent');
       
-      const response = await client.callTool('claude_code', {
-        prompt: 'Test prompt',
-        workFolder: nonExistentDir,
-      });
-      
-      expect(response).toBeTruthy();
+      await expect(
+        client.callTool('claude_code', {
+          prompt: 'Test prompt',
+          workFolder: nonExistentDir,
+        })
+      ).rejects.toThrow(/does not exist/i);
     });
   });
 

@@ -1,8 +1,8 @@
 {
-  "name": "@steipete/claude-code-mcp",
-  "version": "1.10.12",
-  "description": "Simple MCP server for Claude Code one-shot execution",
-  "author": "Peter Steinberger",
+  "name": "@mkxultra/claude-code-mcp",
+  "version": "1.0.0",
+  "description": "Enhanced MCP server for Claude Code with file-based prompts, session management, and configurable working directories",
+  "author": "mkXultra",
   "license": "MIT",
   "main": "dist/server.js",
   "bin": {
@@ -12,7 +12,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "tsx src/server.ts",
-    "test": "npm run build && vitest",
+    "test": "npm run build && vitest run",
     "test:unit": "vitest run --config vitest.config.unit.ts",
     "test:e2e": "npm run build && vitest run --config vitest.config.e2e.ts",
     "test:e2e:local": "npm run build && vitest run --config vitest.config.e2e.ts",
@@ -34,7 +34,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/steipete/claude-code-mcp.git"
+    "url": "git+https://github.com/mkXultra/claude-code-mcp.git"
   },
   "keywords": [
     "mcp",
@@ -45,7 +45,7 @@
     "tools"
   ],
   "bugs": {
-    "url": "https://github.com/steipete/claude-code-mcp/issues"
+    "url": "https://github.com/mkXultra/claude-code-mcp/issues"
   },
-  "homepage": "https://github.com/steipete/claude-code-mcp#readme"
+  "homepage": "https://github.com/mkXultra/claude-code-mcp#readme"
 }
