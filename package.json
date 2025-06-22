@@ -1,6 +1,6 @@
 {
   "name": "@mkxultra/claude-code-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Enhanced MCP server for Claude Code with file-based prompts, session management, and configurable working directories",
   "author": "mkXultra",
   "license": "MIT",

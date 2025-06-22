@@ -153,6 +153,81 @@ describe('Claude Code MCP E2E Tests', () => {
     });
   });
 
+  describe('Model Alias Handling', () => {
+    it('should resolve haiku alias when calling claude_code', async () => {
+      const response = await client.callTool('claude_code', {
+        prompt: 'Test with haiku model',
+        workFolder: testDir,
+        model: 'haiku'
+      });
+      
+      expect(response).toEqual([{
+        type: 'text',
+        text: expect.stringContaining('pid'),
+      }]);
+      
+      // Extract PID from response
+      const responseText = response[0].text;
+      const pidMatch = responseText.match(/"pid":\s*(\d+)/);
+      expect(pidMatch).toBeTruthy();
+      
+      // Get the PID and check the process
+      const pid = parseInt(pidMatch![1]);
+      const processes = await client.callTool('list_claude_processes', {});
+      const processesText = processes[0].text;
+      const processData = JSON.parse(processesText);
+      
+      // Find our process
+      const ourProcess = processData.find((p: any) => p.pid === pid);
+      expect(ourProcess).toBeTruthy();
+      
+      // Verify that the model was set correctly
+      expect(ourProcess.model).toBe('haiku');
+    });
+
+    it('should pass non-alias model names unchanged', async () => {
+      const response = await client.callTool('claude_code', {
+        prompt: 'Test with sonnet model',
+        workFolder: testDir,
+        model: 'sonnet'
+      });
+      
+      expect(response).toEqual([{
+        type: 'text',
+        text: expect.stringContaining('pid'),
+      }]);
+      
+      // Extract PID
+      const responseText = response[0].text;
+      const pidMatch = responseText.match(/"pid":\s*(\d+)/);
+      const pid = parseInt(pidMatch![1]);
+      
+      // Check the process
+      const processes = await client.callTool('list_claude_processes', {});
+      const processesText = processes[0].text;
+      const processData = JSON.parse(processesText);
+      
+      // Find our process
+      const ourProcess = processData.find((p: any) => p.pid === pid);
+      expect(ourProcess).toBeTruthy();
+      
+      // The model should be unchanged
+      expect(ourProcess.model).toBe('sonnet');
+    });
+    
+    it('should work without specifying a model', async () => {
+      const response = await client.callTool('claude_code', {
+        prompt: 'Test without model parameter',
+        workFolder: testDir
+      });
+      
+      expect(response).toEqual([{
+        type: 'text',
+        text: expect.stringContaining('pid'),
+      }]);
+    });
+  });
+
   describe('Debug Mode', () => {
     it('should log debug information when enabled', async () => {
       // Debug logs go to stderr, which we capture in the client

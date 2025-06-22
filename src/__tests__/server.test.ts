@@ -677,6 +677,103 @@ describe('ClaudeCodeServer Unit Tests', () => {
       );
     });
 
+    it('should resolve model aliases when calling claude_code tool', async () => {
+      mockHomedir.mockReturnValue('/home/user');
+      mockExistsSync.mockReturnValue(true);
+      
+      // Set up spawn mock to return a process
+      const mockProcess = new EventEmitter() as any;
+      mockProcess.stdout = new EventEmitter();
+      mockProcess.stderr = new EventEmitter();
+      mockProcess.pid = 12345;
+      mockSpawn.mockReturnValue(mockProcess);
+      
+      // Set up Server mock
+      setupServerMock();
+      
+      const module = await import('../server.js');
+      // @ts-ignore
+      const { ClaudeCodeServer } = module;
+      const server = new ClaudeCodeServer();
+      const mockServerInstance = vi.mocked(Server).mock.results[0].value;
+      
+      // Find the CallToolRequest handler
+      const callToolCall = mockServerInstance.setRequestHandler.mock.calls.find(
+        (call: any[]) => call[0].name === 'callTool'
+      );
+      
+      const handler = callToolCall[1];
+      
+      // Test with haiku alias
+      const result = await handler({
+        params: {
+          name: 'claude_code',
+          arguments: {
+            prompt: 'test prompt',
+            workFolder: '/tmp',
+            model: 'haiku'
+          }
+        }
+      });
+      
+      // Verify spawn was called with resolved model name
+      expect(mockSpawn).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.arrayContaining(['--model', 'claude-3-5-haiku-20241022']),
+        expect.any(Object)
+      );
+      
+      // Verify PID is returned
+      expect(result.content[0].text).toContain('"pid": 12345');
+    });
+
+    it('should pass non-alias model names unchanged', async () => {
+      mockHomedir.mockReturnValue('/home/user');
+      mockExistsSync.mockReturnValue(true);
+      
+      // Set up spawn mock to return a process
+      const mockProcess = new EventEmitter() as any;
+      mockProcess.stdout = new EventEmitter();
+      mockProcess.stderr = new EventEmitter();
+      mockProcess.pid = 12346;
+      mockSpawn.mockReturnValue(mockProcess);
+      
+      // Set up Server mock
+      setupServerMock();
+      
+      const module = await import('../server.js');
+      // @ts-ignore
+      const { ClaudeCodeServer } = module;
+      const server = new ClaudeCodeServer();
+      const mockServerInstance = vi.mocked(Server).mock.results[0].value;
+      
+      // Find the CallToolRequest handler
+      const callToolCall = mockServerInstance.setRequestHandler.mock.calls.find(
+        (call: any[]) => call[0].name === 'callTool'
+      );
+      
+      const handler = callToolCall[1];
+      
+      // Test with non-alias model name
+      const result = await handler({
+        params: {
+          name: 'claude_code',
+          arguments: {
+            prompt: 'test prompt',
+            workFolder: '/tmp',
+            model: 'sonnet'
+          }
+        }
+      });
+      
+      // Verify spawn was called with unchanged model name
+      expect(mockSpawn).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.arrayContaining(['--model', 'sonnet']),
+        expect.any(Object)
+      );
+    });
+
     it('should reject when both prompt and prompt_file are provided', async () => {
       mockHomedir.mockReturnValue('/home/user');
       mockExistsSync.mockReturnValue(true);

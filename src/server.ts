@@ -17,6 +17,11 @@ import * as path from 'path';
 // Server version - update this when releasing new versions
 const SERVER_VERSION = "1.10.12";
 
+// Model alias mappings for user-friendly model names
+const MODEL_ALIASES: Record<string, string> = {
+  'haiku': 'claude-3-5-haiku-20241022'
+};
+
 // Define debugMode globally using const
 const debugMode = process.env.MCP_CLAUDE_DEBUG === 'true';
 
@@ -107,6 +112,15 @@ interface ClaudeCodeArgs {
   workFolder: string;
   model?: string;
   session_id?: string;
+}
+
+/**
+ * Resolves model aliases to their full model names
+ * @param model - The model name or alias to resolve
+ * @returns The full model name, or the original value if no alias exists
+ */
+export function resolveModelAlias(model: string): string {
+  return MODEL_ALIASES[model] || model;
 }
 
 // Ensure spawnAsync is defined correctly *before* the class
@@ -239,7 +253,7 @@ export class ClaudeCodeServer {
               },
               model: {
                 type: 'string',
-                description: 'The Claude model to use: "sonnet" or "opus". If not specified, uses the default model.',
+                description: 'The Claude model to use: "sonnet", "opus", or "haiku" (alias for claude-3-5-haiku-20241022). If not specified, uses the default model.',
               },
               session_id: {
                 type: 'string',
@@ -377,7 +391,8 @@ export class ClaudeCodeServer {
     
     claudeProcessArgs.push('-p', prompt);
     if (toolArguments.model && typeof toolArguments.model === 'string') {
-      claudeProcessArgs.push('--model', toolArguments.model);
+      const resolvedModel = resolveModelAlias(toolArguments.model);
+      claudeProcessArgs.push('--model', resolvedModel);
     }
 
     // Spawn process without waiting
