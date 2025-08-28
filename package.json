@@ -1,12 +1,12 @@
 {
-  "name": "@mkxultra/claude-code-mcp",
-  "version": "1.0.1",
-  "description": "Enhanced MCP server for Claude Code with file-based prompts, session management, and configurable working directories",
+  "name": "ai-cli-mcp",
+  "version": "2.0.0",
+  "description": "MCP server for AI CLI tools (Claude and Codex) with background process management",
   "author": "mkXultra",
   "license": "MIT",
   "main": "dist/server.js",
   "bin": {
-    "claude-code-mcp": "dist/server.js"
+    "ai-cli-mcp": "dist/server.js"
   },
   "scripts": {
     "build": "tsc",
@@ -40,9 +40,11 @@
     "mcp",
     "model-context-protocol",
     "claude",
+    "codex",
     "ai",
     "llm",
-    "tools"
+    "tools",
+    "gpt5"
   ],
   "bugs": {
     "url": "https://github.com/mkXultra/claude-code-mcp/issues"

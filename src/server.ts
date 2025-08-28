@@ -13,9 +13,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve as pathResolve } from 'node:path';
 import * as path from 'path';
+import { parseCodexOutput, parseClaudeOutput } from './parsers.js';
 
 // Server version - update this when releasing new versions
-const SERVER_VERSION = "1.10.12";
+const SERVER_VERSION = "2.0.0";
 
 // Model alias mappings for user-friendly model names
 const MODEL_ALIASES: Record<string, string> = {
@@ -38,6 +39,7 @@ interface ClaudeProcess {
   prompt: string;
   workFolder: string;
   model?: string;
+  toolType: 'claude' | 'codex';  // Identify which CLI tool
   startTime: string;
   stdout: string;
   stderr: string;
@@ -53,6 +55,49 @@ export function debugLog(message?: any, ...optionalParams: any[]): void {
   if (debugMode) {
     console.error(message, ...optionalParams);
   }
+}
+
+/**
+ * Determine the Codex CLI command/path.
+ * Similar to findClaudeCli but for Codex
+ */
+export function findCodexCli(): string {
+  debugLog('[Debug] Attempting to find Codex CLI...');
+
+  // Check for custom CLI name from environment variable
+  const customCliName = process.env.CODEX_CLI_NAME;
+  if (customCliName) {
+    debugLog(`[Debug] Using custom Codex CLI name from CODEX_CLI_NAME: ${customCliName}`);
+    
+    // If it's an absolute path, use it directly
+    if (path.isAbsolute(customCliName)) {
+      debugLog(`[Debug] CODEX_CLI_NAME is an absolute path: ${customCliName}`);
+      return customCliName;
+    }
+    
+    // If it starts with ~ or ./, reject as relative paths are not allowed
+    if (customCliName.startsWith('./') || customCliName.startsWith('../') || customCliName.includes('/')) {
+      throw new Error(`Invalid CODEX_CLI_NAME: Relative paths are not allowed. Use either a simple name (e.g., 'codex') or an absolute path (e.g., '/tmp/codex-test')`);
+    }
+  }
+  
+  const cliName = customCliName || 'codex';
+
+  // Try local install path: ~/.codex/local/codex
+  const userPath = join(homedir(), '.codex', 'local', 'codex');
+  debugLog(`[Debug] Checking for Codex CLI at local user path: ${userPath}`);
+
+  if (existsSync(userPath)) {
+    debugLog(`[Debug] Found Codex CLI at local user path: ${userPath}. Using this path.`);
+    return userPath;
+  } else {
+    debugLog(`[Debug] Codex CLI not found at local user path: ${userPath}.`);
+  }
+
+  // Fallback to CLI name (PATH lookup)
+  debugLog(`[Debug] Falling back to "${cliName}" command name, relying on spawn/PATH lookup.`);
+  console.warn(`[Warning] Codex CLI not found at ~/.codex/local/codex. Falling back to "${cliName}" in PATH. Ensure it is installed and accessible.`);
+  return cliName;
 }
 
 /**
@@ -112,6 +157,16 @@ interface ClaudeCodeArgs {
   workFolder: string;
   model?: string;
   session_id?: string;
+}
+
+/**
+ * Interface for Codex tool arguments
+ */
+interface CodexArgs {
+  prompt?: string;
+  prompt_file?: string;
+  workFolder: string;
+  model?: string;  // Format: gpt5-low, gpt5-middle, gpt5-high
 }
 
 /**
@@ -176,19 +231,22 @@ export async function spawnAsync(command: string, args: string[], options?: { ti
 export class ClaudeCodeServer {
   private server: Server;
   private claudeCliPath: string;
+  private codexCliPath: string;
   private sigintHandler?: () => Promise<void>;
   private packageVersion: string;
 
   constructor() {
     // Use the simplified findClaudeCli function
     this.claudeCliPath = findClaudeCli(); // Removed debugMode argument
+    this.codexCliPath = findCodexCli();
     console.error(`[Setup] Using Claude CLI command/path: ${this.claudeCliPath}`);
+    console.error(`[Setup] Using Codex CLI command/path: ${this.codexCliPath}`);
     this.packageVersion = SERVER_VERSION;
 
     this.server = new Server(
       {
-        name: 'claude_code',
-        version: '1.0.0',
+        name: 'ai_cli_mcp',
+        version: SERVER_VERSION,
       },
       {
         capabilities: {
@@ -215,8 +273,8 @@ export class ClaudeCodeServer {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
         {
-          name: 'claude_code',
-          description: `Claude Code Agent: Starts a Claude CLI process in the background and returns a PID immediately. Use list_claude_processes and get_claude_result to monitor progress.
+          name: 'run',
+          description: `AI Agent Runner: Starts a Claude or Codex CLI process in the background and returns a PID immediately. Use list_processes and get_result to monitor progress.
 
 • File ops: Create, read, (fuzzy) edit, move, copy, delete, list files, analyze/ocr images, file content analysis
 • Code: Generate / analyse / refactor / fix
@@ -227,21 +285,29 @@ export class ClaudeCodeServer {
 
 **IMPORTANT**: This tool now returns immediately with a PID. Use other tools to check status and get results.
 
+**Supported models**: 
+"sonnet", "opus", "haiku", "gpt-5-low", "gpt-5-medium", "gpt-5-high"
+
 **Prompt input**: You must provide EITHER prompt (string) OR prompt_file (file path), but not both.
 
 **Prompt tips**
 1. Be concise, explicit & step-by-step for complex tasks.
-2. Check process status with list_claude_processes
-3. Get results with get_claude_result using the returned PID
-4. Kill long-running processes with kill_claude_process if needed
+2. Check process status with list_processes
+3. Get results with get_result using the returned PID
+4. Kill long-running processes with kill_process if needed
 
         `,
           inputSchema: {
             type: 'object',
             properties: {
+              agent: {
+                type: 'string',
+                description: 'The agent to use: "claude" or "codex". Defaults to "claude".',
+                enum: ['claude', 'codex'],
+              },
               prompt: {
                 type: 'string',
-                description: 'The detailed natural language prompt for Claude to execute. Either this or prompt_file is required.',
+                description: 'The detailed natural language prompt for the agent to execute. Either this or prompt_file is required.',
               },
               prompt_file: {
                 type: 'string',
@@ -249,45 +315,45 @@ export class ClaudeCodeServer {
               },
               workFolder: {
                 type: 'string',
-                description: 'The working directory for the Claude CLI execution. Must be an absolute path.',
+                description: 'The working directory for the agent execution. Must be an absolute path.',
               },
               model: {
                 type: 'string',
-                description: 'The Claude model to use: "sonnet", "opus", or "haiku" (alias for claude-3-5-haiku-20241022). If not specified, uses the default model.',
+                description: 'The model to use: "sonnet", "opus", "haiku", "gpt-5-low", "gpt-5-medium", "gpt-5-high".',
               },
               session_id: {
                 type: 'string',
-                description: 'Optional session ID to resume a previous Claude session. If provided, Claude CLI will be started with -r flag.',
+                description: 'Optional session ID to resume a previous session. Supported for: haiku, sonnet, opus.',
               },
             },
             required: ['workFolder'],
           },
         },
         {
-          name: 'list_claude_processes',
-          description: 'List all running and completed Claude CLI processes with their status, PID, and basic info.',
+          name: 'list_processes',
+          description: 'List all running and completed AI agent processes with their status, PID, and basic info.',
           inputSchema: {
             type: 'object',
             properties: {},
           },
         },
         {
-          name: 'get_claude_result',
-          description: 'Get the current output and status of a Claude CLI process by PID. Returns the JSON output from Claude CLI including session_id, along with process metadata.',
+          name: 'get_result',
+          description: 'Get the current output and status of an AI agent process by PID. Returns the output from the agent including session_id (if applicable), along with process metadata.',
           inputSchema: {
             type: 'object',
             properties: {
               pid: {
                 type: 'number',
-                description: 'The process ID returned by claude_code tool.',
+                description: 'The process ID returned by run tool.',
               },
             },
             required: ['pid'],
           },
         },
         {
-          name: 'kill_claude_process',
-          description: 'Terminate a running Claude CLI process by PID.',
+          name: 'kill_process',
+          description: 'Terminate a running AI agent process by PID.',
           inputSchema: {
             type: 'object',
             properties: {
@@ -312,13 +378,13 @@ export class ClaudeCodeServer {
       const toolArguments = args.params.arguments || {};
 
       switch (toolName) {
-        case 'claude_code':
-          return this.handleClaudeCode(toolArguments);
-        case 'list_claude_processes':
+        case 'run':
+          return this.handleRun(toolArguments);
+        case 'list_processes':
           return this.handleListProcesses();
-        case 'get_claude_result':
+        case 'get_result':
           return this.handleGetResult(toolArguments);
-        case 'kill_claude_process':
+        case 'kill_process':
           return this.handleKillProcess(toolArguments);
         default:
           throw new McpError(ErrorCode.MethodNotFound, `Tool ${toolName} not found`);
@@ -327,9 +393,9 @@ export class ClaudeCodeServer {
   }
 
   /**
-   * Handle claude_code tool - starts process and returns PID immediately
+   * Handle run tool - starts Claude or Codex process and returns PID immediately
    */
-  private async handleClaudeCode(toolArguments: any): Promise<ServerResult> {
+  private async handleRun(toolArguments: any): Promise<ServerResult> {
     // Validate workFolder is required
     if (!toolArguments.workFolder || typeof toolArguments.workFolder !== 'string') {
       throw new McpError(ErrorCode.InvalidParams, 'Missing or invalid required parameter: workFolder');
@@ -377,26 +443,53 @@ export class ClaudeCodeServer {
 
     // Print version on first use
     if (isFirstToolUse) {
-      console.error(`claude_code v${SERVER_VERSION} started at ${serverStartupTime}`);
+      console.error(`ai_cli_mcp v${SERVER_VERSION} started at ${serverStartupTime}`);
       isFirstToolUse = false;
     }
 
-    // Build command arguments
-    const claudeProcessArgs = ['--dangerously-skip-permissions', '--output-format', 'json'];
+    // Determine which agent to use based on model name
+    const model = toolArguments.model || '';
+    const agent = model.startsWith('gpt-') ? 'codex' : 'claude';
     
-    // Add session_id if provided
-    if (toolArguments.session_id && typeof toolArguments.session_id === 'string') {
-      claudeProcessArgs.push('-r', toolArguments.session_id);
-    }
+    let cliPath: string;
+    let processArgs: string[];
     
-    claudeProcessArgs.push('-p', prompt);
-    if (toolArguments.model && typeof toolArguments.model === 'string') {
-      const resolvedModel = resolveModelAlias(toolArguments.model);
-      claudeProcessArgs.push('--model', resolvedModel);
+    if (agent === 'codex') {
+      // Handle Codex
+      cliPath = this.codexCliPath;
+      processArgs = ['exec'];
+      
+      // Parse model format for Codex (e.g., gpt-5-low -> model: gpt-5, effort: low)
+      if (toolArguments.model) {
+        // Split by "gpt-5-" to get the effort level
+        const effort = toolArguments.model.replace('gpt-5-', '');
+        if (effort && effort !== toolArguments.model) {
+          processArgs.push('-c', `model_reasoning_effort=${effort}`);
+        }
+        processArgs.push('--model', 'gpt-5');
+      }
+      
+      processArgs.push('--full-auto', '--json', prompt);
+      
+    } else {
+      // Handle Claude (default)
+      cliPath = this.claudeCliPath;
+      processArgs = ['--dangerously-skip-permissions', '--output-format', 'json'];
+      
+      // Add session_id if provided (Claude only)
+      if (toolArguments.session_id && typeof toolArguments.session_id === 'string') {
+        processArgs.push('-r', toolArguments.session_id);
+      }
+      
+      processArgs.push('-p', prompt);
+      if (toolArguments.model && typeof toolArguments.model === 'string') {
+        const resolvedModel = resolveModelAlias(toolArguments.model);
+        processArgs.push('--model', resolvedModel);
+      }
     }
 
     // Spawn process without waiting
-    const childProcess = spawn(this.claudeCliPath, claudeProcessArgs, {
+    const childProcess = spawn(cliPath, processArgs, {
       cwd: effectiveCwd,
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: false
@@ -404,7 +497,7 @@ export class ClaudeCodeServer {
 
     const pid = childProcess.pid;
     if (!pid) {
-      throw new McpError(ErrorCode.InternalError, 'Failed to start Claude CLI process');
+      throw new McpError(ErrorCode.InternalError, `Failed to start ${agent} CLI process`);
     }
 
     // Create process tracking entry
@@ -414,6 +507,7 @@ export class ClaudeCodeServer {
       prompt,
       workFolder: effectiveCwd,
       model: toolArguments.model,
+      toolType: agent as 'claude' | 'codex',
       startTime: new Date().toISOString(),
       stdout: '',
       stderr: '',
@@ -461,14 +555,15 @@ export class ClaudeCodeServer {
         text: JSON.stringify({ 
           pid, 
           status: 'started',
-          message: 'Claude Code process started successfully'
+          agent,
+          message: `${agent} process started successfully`
         }, null, 2)
       }]
     };
   }
 
   /**
-   * Handle list_claude_processes tool
+   * Handle list_processes tool
    */
   private async handleListProcesses(): Promise<ServerResult> {
     const processes: any[] = [];
@@ -476,6 +571,7 @@ export class ClaudeCodeServer {
     for (const [pid, process] of processManager.entries()) {
       const processInfo: any = {
         pid,
+        agent: process.toolType,
         status: process.status,
         startTime: process.startTime,
         prompt: process.prompt.substring(0, 100) + (process.prompt.length > 100 ? '...' : ''),
@@ -508,7 +604,7 @@ export class ClaudeCodeServer {
   }
 
   /**
-   * Handle get_claude_result tool
+   * Handle get_result tool
    */
   private async handleGetResult(toolArguments: any): Promise<ServerResult> {
     if (!toolArguments.pid || typeof toolArguments.pid !== 'number') {
@@ -522,20 +618,20 @@ export class ClaudeCodeServer {
       throw new McpError(ErrorCode.InvalidParams, `Process with PID ${pid} not found`);
     }
 
-    // Try to parse stdout as JSON from Claude CLI
-    let claudeOutput: any = null;
+    // Parse output based on agent type
+    let agentOutput: any = null;
     if (process.stdout) {
-      try {
-        claudeOutput = JSON.parse(process.stdout);
-      } catch (e) {
-        // If parsing fails, return raw output
-        debugLog(`[Debug] Failed to parse Claude CLI output as JSON: ${e}`);
+      if (process.toolType === 'codex') {
+        agentOutput = parseCodexOutput(process.stdout);
+      } else if (process.toolType === 'claude') {
+        agentOutput = parseClaudeOutput(process.stdout);
       }
     }
 
-    // Construct response with Claude's JSON output and process metadata
+    // Construct response with agent's output and process metadata
     const response: any = {
       pid,
+      agent: process.toolType,
       status: process.status,
       exitCode: process.exitCode,
       startTime: process.startTime,
@@ -544,12 +640,12 @@ export class ClaudeCodeServer {
       model: process.model
     };
 
-    // If we have valid JSON output from Claude, include it
-    if (claudeOutput) {
-      response.claudeOutput = claudeOutput;
-      // Extract session_id if available
-      if (claudeOutput.session_id) {
-        response.session_id = claudeOutput.session_id;
+    // If we have valid output from agent, include it
+    if (agentOutput) {
+      response.agentOutput = agentOutput;
+      // Extract session_id if available (Claude only)
+      if (process.toolType === 'claude' && agentOutput.session_id) {
+        response.session_id = agentOutput.session_id;
       }
     } else {
       // Fallback to raw output
@@ -566,7 +662,7 @@ export class ClaudeCodeServer {
   }
 
   /**
-   * Handle kill_claude_process tool
+   * Handle kill_process tool
    */
   private async handleKillProcess(toolArguments: any): Promise<ServerResult> {
     if (!toolArguments.pid || typeof toolArguments.pid !== 'number') {
@@ -620,7 +716,7 @@ export class ClaudeCodeServer {
     // Revert to original server start logic if listen caused errors
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error('Claude Code MCP server running on stdio');
+    console.error('AI CLI MCP server running on stdio');
   }
 
   /**

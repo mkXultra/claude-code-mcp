@@ -1,24 +1,25 @@
-# Claude Code MCP Server
+# AI CLI MCP Server
 
-<img src="assets/claude_code_mcp_logo.png" alt="Claude Code MCP Logo">
-
-[![npm package](https://img.shields.io/npm/v/@mkxultra/claude-code-mcp)](https://www.npmjs.com/package/@mkxultra/claude-code-mcp)
+[![npm package](https://img.shields.io/npm/v/ai-cli-mcp)](https://www.npmjs.com/package/ai-cli-mcp)
 [![View changelog](https://img.shields.io/badge/Explore%20Changelog-brightgreen)](/CHANGELOG.md)
 
-An MCP (Model Context Protocol) server that allows running Claude Code in one-shot mode with permissions bypassed automatically.
+> **📦 Package Migration Notice**: This package was formerly `@mkxultra/claude-code-mcp` and has been renamed to `ai-cli-mcp` to reflect its expanded support for multiple AI CLI tools.
 
-Did you notice that Cursor sometimes struggles with complex, multi-step edits or operations? This server, with its powerful unified `claude_code` tool, aims to make Claude a more direct and capable agent for your coding tasks.
+An MCP (Model Context Protocol) server that allows running AI CLI tools (Claude and Codex) in background processes with automatic permission handling.
+
+Did you notice that Cursor sometimes struggles with complex, multi-step edits or operations? This server, with its powerful unified `run` tool, enables multiple AI agents to handle your coding tasks more effectively.
 
 <img src="assets/screenshot.png" width="300" alt="Screenshot">
 
 ## Overview
 
-This MCP server provides one tool that can be used by LLMs to interact with Claude Code. When integrated with Claude Desktop or other MCP clients, it allows LLMs to:
+This MCP server provides tools that can be used by LLMs to interact with AI CLI tools. When integrated with MCP clients, it allows LLMs to:
 
-- Run Claude Code with all permissions bypassed (using `--dangerously-skip-permissions`)
-- Execute Claude Code with any prompt without permission interruptions
-- Access file editing capabilities directly
-- Enable specific tools by default
+- Run Claude CLI with all permissions bypassed (using `--dangerously-skip-permissions`)
+- Execute Codex CLI with automatic approval mode (using `--full-auto`)
+- Support multiple AI models: Claude (sonnet, opus, haiku) and Codex (gpt-5-low, gpt-5-medium, gpt-5-high)
+- Manage background processes with PID tracking
+- Parse and return structured outputs from both tools
 
 ## Benefits
 
@@ -28,34 +29,25 @@ This MCP server provides one tool that can be used by LLMs to interact with Clau
 - Claude has wider system access and can do things that Cursor/Windsurf can't do (or believe they can't), so whenever they are stuck just ask them "use claude code" and it will usually un-stuck them.
 - Agents in Agents rules.
 
-<img src="assets/agents_in_agents_meme.jpg" alt="Agents in Agents Meme">
-
 ## Prerequisites
 
 - Node.js v20 or later (Use fnm or nvm to install)
-- Claude CLI installed locally (run it and call /doctor) and `-dangerously-skip-permissions` accepted.
+- Claude CLI installed locally (run it and call /doctor) and `--dangerously-skip-permissions` accepted
+- Codex CLI installed (optional, for Codex support)
 
 ## Configuration
 
 ### Environment Variables
 
-- `CLAUDE_CLI_NAME`: Override the Claude CLI binary name or provide an absolute path (default: `claude`). This allows you to use a custom Claude CLI binary. This is useful for:
-  - Using custom Claude CLI wrappers
-  - Testing with mocked binaries
-  - Running multiple Claude CLI versions side by side
-  
-  Supported formats:
-  - Simple name: `CLAUDE_CLI_NAME=claude-custom` or `CLAUDE_CLI_NAME=claude-v2`
-  - Absolute path: `CLAUDE_CLI_NAME=/path/to/custom/claude`
-  
-  Relative paths (e.g., `./claude` or `../claude`) are not allowed and will throw an error.
-  
-  When set to a simple name, the server will look for the specified binary in:
-  1. The system PATH (instead of the default `claude` command)
-  
-  Note: The local user installation path (`~/.claude/local/claude`) will still be checked but only for the default `claude` binary.
-
+- `CLAUDE_CLI_NAME`: Override the Claude CLI binary name or provide an absolute path (default: `claude`)
+- `CODEX_CLI_NAME`: Override the Codex CLI binary name or provide an absolute path (default: `codex`)
 - `MCP_CLAUDE_DEBUG`: Enable debug logging (set to `true` for verbose output)
+
+Both CLI name variables support:
+- Simple name: `CLAUDE_CLI_NAME=claude-custom` or `CODEX_CLI_NAME=codex-v2`
+- Absolute path: `CLAUDE_CLI_NAME=/path/to/custom/claude`
+
+Note: Relative paths are not allowed and will throw an error.
 
 ## Installation & Usage
 
@@ -64,11 +56,11 @@ The recommended way to use this server is by installing it by using `npx`.
 ### Using npx in your MCP configuration:
 
 ```json
-    "claude-code-mcp": {
+    "ai-cli-mcp": {
       "command": "npx",
       "args": [
         "-y",
-        "@mkxultra/claude-code-mcp@latest"
+        "ai-cli-mcp@latest"
       ]
     },
 ```
@@ -76,40 +68,47 @@ The recommended way to use this server is by installing it by using `npx`.
 ### Using Claude CLI mcp add command:
 
 ```bash
-claude mcp add ccm '{"name":"ccm","command":"npx","args":["-y","@mkxultra/claude-code-mcp@latest"]}'
+claude mcp add ai-cli '{"name":"ai-cli","command":"npx","args":["-y","ai-cli-mcp@latest"]}'
 ```
 
-### With custom Claude CLI binary:
+### With custom CLI binaries:
 
 ```json
-    "claude-code-mcp": {
+    "ai-cli-mcp": {
       "command": "npx",
       "args": [
         "-y",
-        "@mkxultra/claude-code-mcp@latest"
+        "ai-cli-mcp@latest"
       ],
       "env": {
-        "CLAUDE_CLI_NAME": "claude-custom"
+        "CLAUDE_CLI_NAME": "claude-custom",
+        "CODEX_CLI_NAME": "codex-custom"
       }
     },
 ```
 
-## Important First-Time Setup: Accepting Permissions
+## Important First-Time Setup
 
-**Before the MCP server can successfully use the `claude_code` tool, you must first run the Claude CLI manually once with the `--dangerously-skip-permissions` flag, login and accept the terms.**
+### For Claude CLI:
 
-This is a one-time requirement by the Claude CLI.
+**Before the MCP server can use Claude, you must first run the Claude CLI manually once with the `--dangerously-skip-permissions` flag, login and accept the terms.**
 
 ```bash
 npm install -g @anthropic-ai/claude-code
-```
-```bash
 claude --dangerously-skip-permissions
 ```
 
 Follow the prompts to accept. Once this is done, the MCP server will be able to use the flag non-interactively.
 
-macOS might ask for all kind of folder permissions the first time the tool runs and the first run then fails. Subsequent runs will work.
+### For Codex CLI:
+
+**For Codex, ensure you're logged in and have accepted any necessary terms:**
+
+```bash
+codex login
+```
+
+macOS might ask for folder permissions the first time either tool runs. If the first run fails, subsequent runs should work.
 
 ## Connecting to Your MCP Client
 
@@ -135,66 +134,63 @@ Windsurf users use `mcp_config.json`
 
 (Note: In some mixed setups, if Cursor is also installed, these clients might fall back to using Cursor's `~/.cursor/mcp.json` path. Prioritize the Codeium-specific paths if using the Codeium extension.)
 
-Create this file if it doesn't exist. Add or update the configuration for `claude_code`:
+Create this file if it doesn't exist. Add or update the configuration for `ai-cli-mcp`:
 
 ## Tools Provided
 
-This server exposes one primary tool:
+This server exposes the following tools:
 
-### `claude_code`
+### `run`
 
-Executes a prompt directly using the Claude Code CLI with `--dangerously-skip-permissions`.
+Executes a prompt using either Claude CLI or Codex CLI. The appropriate CLI is automatically selected based on the model name.
 
 **Arguments:**
-- `prompt` (string, optional): The prompt to send to Claude Code. Either `prompt` or `prompt_file` is required.
+- `prompt` (string, optional): The prompt to send to the AI agent. Either `prompt` or `prompt_file` is required.
 - `prompt_file` (string, optional): Path to a file containing the prompt. Either `prompt` or `prompt_file` is required. Can be absolute path or relative to `workFolder`.
-- `workFolder` (string, required): The working directory for the Claude CLI execution. Must be an absolute path.
-- `model` (string, optional): The Claude model to use: "sonnet" or "opus". If not specified, uses the default model.
-- `session_id` (string, optional): Optional session ID to resume a previous Claude session. If provided, Claude CLI will be started with -r flag.
+- `workFolder` (string, required): The working directory for the CLI execution. Must be an absolute path.
+- `model` (string, optional): The model to use:
+  - Claude models: "sonnet", "opus", "haiku"
+  - Codex models: "gpt-5-low", "gpt-5-medium", "gpt-5-high"
+- `session_id` (string, optional): Optional session ID to resume a previous session. Supported for: haiku, sonnet, opus.
 
-**Note**: You must provide either `prompt` or `prompt_file`, but not both. If both are provided, an error will be returned.
+### `list_processes`
 
-**Example MCP Request:**
+Lists all running and completed AI agent processes with their status, PID, and basic info.
+
+### `get_result`
+
+Gets the current output and status of an AI agent process by PID.
+
+**Arguments:**
+- `pid` (number, required): The process ID returned by the `run` tool.
+
+### `kill_process`
+
+Terminates a running AI agent process by PID.
+
+**Arguments:**
+- `pid` (number, required): The process ID to terminate.
+
+**Example with Claude:**
 ```json
 {
-  "toolName": "claude_code:claude_code",
+  "toolName": "run",
   "arguments": {
     "prompt": "Refactor the function foo in main.py to be async.",
-    "workFolder": "/Users/username/my_project"
-  }
-}
-```
-
-**Example with session resumption:**
-```json
-{
-  "toolName": "claude_code:claude_code",
-  "arguments": {
-    "prompt": "Continue working on the previous task",
     "workFolder": "/Users/username/my_project",
-    "session_id": "01234567-89ab-cdef-0123-456789abcdef"
+    "model": "sonnet"
   }
 }
 ```
 
-**Example with prompt file:**
+**Example with Codex:**
 ```json
 {
-  "toolName": "claude_code:claude_code",
+  "toolName": "run",
   "arguments": {
-    "prompt_file": "/Users/username/prompts/complex_task.txt",
-    "workFolder": "/Users/username/my_project"
-  }
-}
-```
-
-**Example with relative prompt file:**
-```json
-{
-  "toolName": "claude_code:claude_code",
-  "arguments": {
-    "prompt_file": "./prompts/template.txt",
-    "workFolder": "/Users/username/my_project"
+    "prompt": "Create a REST API with Express.js",
+    "workFolder": "/Users/username/my_project",
+    "model": "gpt-5-high"
   }
 }
 ```
@@ -223,7 +219,7 @@ Here's an example of the Claude Code tool listing files in a directory:
 
 ## Key Use Cases
 
-This server, through its unified `claude_code` tool, unlocks a wide range of powerful capabilities by giving your AI direct access to the Claude Code CLI. Here are some examples of what you can achieve:
+This server, through its unified `run` tool, unlocks a wide range of powerful capabilities by giving your AI direct access to both Claude and Codex CLI tools. Here are some examples of what you can achieve:
 
 1.  **Code Generation, Analysis & Refactoring:**
     -   `"Generate a Python script to parse CSV data and output JSON."`
@@ -264,9 +260,9 @@ This server, through its unified `claude_code` tool, unlocks a wide range of pow
 
 ### Complex Multi-Step Operations
 
-This example illustrates `claude_code` handling a more complex, multi-step task, such as preparing a release by creating a branch, updating multiple files (`package.json`, `CHANGELOG.md`), committing changes, and initiating a pull request, all within a single, coherent operation.
+This example illustrates the AI agent handling a more complex, multi-step task, such as preparing a release by creating a branch, updating multiple files (`package.json`, `CHANGELOG.md`), committing changes, and initiating a pull request, all within a single, coherent operation.
 
-<img src="assets/claude_code_multistep_example.png" alt="Claude Code multi-step example" width="50%">
+<img src="assets/claude_code_multistep_example.png" alt="AI agent multi-step example" width="50%">
 
 **CRITICAL: Remember to provide Current Working Directory (CWD) context in your prompts for file system or git operations (e.g., `"Your work folder is /path/to/project\n\n...your command..."`).**
 
