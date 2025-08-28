@@ -16,7 +16,7 @@ import * as path from 'path';
 import { parseCodexOutput, parseClaudeOutput } from './parsers.js';
 
 // Server version - update this when releasing new versions
-const SERVER_VERSION = "2.0.0";
+const SERVER_VERSION = "2.0.1";
 
 // Model alias mappings for user-friendly model names
 const MODEL_ALIASES: Record<string, string> = {
@@ -300,11 +300,6 @@ export class ClaudeCodeServer {
           inputSchema: {
             type: 'object',
             properties: {
-              agent: {
-                type: 'string',
-                description: 'The agent to use: "claude" or "codex". Defaults to "claude".',
-                enum: ['claude', 'codex'],
-              },
               prompt: {
                 type: 'string',
                 description: 'The detailed natural language prompt for the agent to execute. Either this or prompt_file is required.',
