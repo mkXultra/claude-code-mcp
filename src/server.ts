@@ -13,10 +13,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve as pathResolve } from 'node:path';
 import * as path from 'path';
-import { parseCodexOutput, parseClaudeOutput } from './parsers.js';
+import { parseCodexOutput, parseClaudeOutput, parseGeminiOutput } from './parsers.js';
 
 // Server version - update this when releasing new versions
-const SERVER_VERSION = "2.0.1";
+const SERVER_VERSION = "2.1.0";
 
 // Model alias mappings for user-friendly model names
 const MODEL_ALIASES: Record<string, string> = {
@@ -39,7 +39,7 @@ interface ClaudeProcess {
   prompt: string;
   workFolder: string;
   model?: string;
-  toolType: 'claude' | 'codex';  // Identify which CLI tool
+  toolType: 'claude' | 'codex' | 'gemini';  // Identify which CLI tool
   startTime: string;
   stdout: string;
   stderr: string;
@@ -55,6 +55,49 @@ export function debugLog(message?: any, ...optionalParams: any[]): void {
   if (debugMode) {
     console.error(message, ...optionalParams);
   }
+}
+
+/**
+ * Determine the Gemini CLI command/path.
+ * Similar to findClaudeCli but for Gemini
+ */
+export function findGeminiCli(): string {
+  debugLog('[Debug] Attempting to find Gemini CLI...');
+
+  // Check for custom CLI name from environment variable
+  const customCliName = process.env.GEMINI_CLI_NAME;
+  if (customCliName) {
+    debugLog(`[Debug] Using custom Gemini CLI name from GEMINI_CLI_NAME: ${customCliName}`);
+
+    // If it's an absolute path, use it directly
+    if (path.isAbsolute(customCliName)) {
+      debugLog(`[Debug] GEMINI_CLI_NAME is an absolute path: ${customCliName}`);
+      return customCliName;
+    }
+
+    // If it starts with ~ or ./, reject as relative paths are not allowed
+    if (customCliName.startsWith('./') || customCliName.startsWith('../') || customCliName.includes('/')) {
+      throw new Error(`Invalid GEMINI_CLI_NAME: Relative paths are not allowed. Use either a simple name (e.g., 'gemini') or an absolute path (e.g., '/tmp/gemini-test')`);
+    }
+  }
+
+  const cliName = customCliName || 'gemini';
+
+  // Try local install path: ~/.gemini/local/gemini
+  const userPath = join(homedir(), '.gemini', 'local', 'gemini');
+  debugLog(`[Debug] Checking for Gemini CLI at local user path: ${userPath}`);
+
+  if (existsSync(userPath)) {
+    debugLog(`[Debug] Found Gemini CLI at local user path: ${userPath}. Using this path.`);
+    return userPath;
+  } else {
+    debugLog(`[Debug] Gemini CLI not found at local user path: ${userPath}.`);
+  }
+
+  // Fallback to CLI name (PATH lookup)
+  debugLog(`[Debug] Falling back to "${cliName}" command name, relying on spawn/PATH lookup.`);
+  console.warn(`[Warning] Gemini CLI not found at ~/.gemini/local/gemini. Falling back to "${cliName}" in PATH. Ensure it is installed and accessible.`);
+  return cliName;
 }
 
 /**
@@ -232,6 +275,7 @@ export class ClaudeCodeServer {
   private server: Server;
   private claudeCliPath: string;
   private codexCliPath: string;
+  private geminiCliPath: string;
   private sigintHandler?: () => Promise<void>;
   private packageVersion: string;
 
@@ -239,8 +283,10 @@ export class ClaudeCodeServer {
     // Use the simplified findClaudeCli function
     this.claudeCliPath = findClaudeCli(); // Removed debugMode argument
     this.codexCliPath = findCodexCli();
+    this.geminiCliPath = findGeminiCli();
     console.error(`[Setup] Using Claude CLI command/path: ${this.claudeCliPath}`);
     console.error(`[Setup] Using Codex CLI command/path: ${this.codexCliPath}`);
+    console.error(`[Setup] Using Gemini CLI command/path: ${this.geminiCliPath}`);
     this.packageVersion = SERVER_VERSION;
 
     this.server = new Server(
@@ -274,7 +320,7 @@ export class ClaudeCodeServer {
       tools: [
         {
           name: 'run',
-          description: `AI Agent Runner: Starts a Claude or Codex CLI process in the background and returns a PID immediately. Use list_processes and get_result to monitor progress.
+          description: `AI Agent Runner: Starts a Claude, Codex, or Gemini CLI process in the background and returns a PID immediately. Use list_processes and get_result to monitor progress.
 
 • File ops: Create, read, (fuzzy) edit, move, copy, delete, list files, analyze/ocr images, file content analysis
 • Code: Generate / analyse / refactor / fix
@@ -285,8 +331,8 @@ export class ClaudeCodeServer {
 
 **IMPORTANT**: This tool now returns immediately with a PID. Use other tools to check status and get results.
 
-**Supported models**: 
-"sonnet", "opus", "haiku", "gpt-5-low", "gpt-5-medium", "gpt-5-high"
+**Supported models**:
+"sonnet", "opus", "haiku", "gpt-5-low", "gpt-5-medium", "gpt-5-high", "gemini-2.5-pro", "gemini-2.5-flash"
 
 **Prompt input**: You must provide EITHER prompt (string) OR prompt_file (file path), but not both.
 
@@ -314,7 +360,7 @@ export class ClaudeCodeServer {
               },
               model: {
                 type: 'string',
-                description: 'The model to use: "sonnet", "opus", "haiku", "gpt-5-low", "gpt-5-medium", "gpt-5-high".',
+                description: 'The model to use: "sonnet", "opus", "haiku", "gpt-5-low", "gpt-5-medium", "gpt-5-high", "gemini-2.5-pro", "gemini-2.5-flash".',
               },
               session_id: {
                 type: 'string',
@@ -444,16 +490,24 @@ export class ClaudeCodeServer {
 
     // Determine which agent to use based on model name
     const model = toolArguments.model || '';
-    const agent = model.startsWith('gpt-') ? 'codex' : 'claude';
-    
+    let agent: 'codex' | 'claude' | 'gemini';
+
+    if (model.startsWith('gpt-')) {
+      agent = 'codex';
+    } else if (model.startsWith('gemini')) {
+      agent = 'gemini';
+    } else {
+      agent = 'claude';
+    }
+
     let cliPath: string;
     let processArgs: string[];
-    
+
     if (agent === 'codex') {
       // Handle Codex
       cliPath = this.codexCliPath;
       processArgs = ['exec'];
-      
+
       // Parse model format for Codex (e.g., gpt-5-low -> model: gpt-5, effort: low)
       if (toolArguments.model) {
         // Split by "gpt-5-" to get the effort level
@@ -463,19 +517,32 @@ export class ClaudeCodeServer {
         }
         processArgs.push('--model', 'gpt-5');
       }
-      
+
       processArgs.push('--full-auto', '--json', prompt);
-      
+
+    } else if (agent === 'gemini') {
+      // Handle Gemini
+      cliPath = this.geminiCliPath;
+      processArgs = ['-y', '--output-format', 'json'];
+
+      // Add model if specified
+      if (toolArguments.model) {
+        processArgs.push('--model', toolArguments.model);
+      }
+
+      // Add prompt as positional argument
+      processArgs.push(prompt);
+
     } else {
       // Handle Claude (default)
       cliPath = this.claudeCliPath;
       processArgs = ['--dangerously-skip-permissions', '--output-format', 'json'];
-      
+
       // Add session_id if provided (Claude only)
       if (toolArguments.session_id && typeof toolArguments.session_id === 'string') {
         processArgs.push('-r', toolArguments.session_id);
       }
-      
+
       processArgs.push('-p', prompt);
       if (toolArguments.model && typeof toolArguments.model === 'string') {
         const resolvedModel = resolveModelAlias(toolArguments.model);
@@ -502,7 +569,7 @@ export class ClaudeCodeServer {
       prompt,
       workFolder: effectiveCwd,
       model: toolArguments.model,
-      toolType: agent as 'claude' | 'codex',
+      toolType: agent,
       startTime: new Date().toISOString(),
       stdout: '',
       stderr: '',
@@ -620,6 +687,8 @@ export class ClaudeCodeServer {
         agentOutput = parseCodexOutput(process.stdout);
       } else if (process.toolType === 'claude') {
         agentOutput = parseClaudeOutput(process.stdout);
+      } else if (process.toolType === 'gemini') {
+        agentOutput = parseGeminiOutput(process.stdout);
       }
     }
 

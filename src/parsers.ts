@@ -45,11 +45,25 @@ export function parseCodexOutput(stdout: string): any {
  */
 export function parseClaudeOutput(stdout: string): any {
   if (!stdout) return null;
-  
+
   try {
     return JSON.parse(stdout);
   } catch (e) {
     debugLog(`[Debug] Failed to parse Claude JSON output: ${e}`);
+    return null;
+  }
+}
+
+/**
+ * Parse Gemini JSON output
+ */
+export function parseGeminiOutput(stdout: string): any {
+  if (!stdout) return null;
+
+  try {
+    return JSON.parse(stdout);
+  } catch (e) {
+    debugLog(`[Debug] Failed to parse Gemini JSON output: ${e}`);
     return null;
   }
 }

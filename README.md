@@ -5,7 +5,7 @@
 
 > **📦 Package Migration Notice**: This package was formerly `@mkxultra/claude-code-mcp` and has been renamed to `ai-cli-mcp` to reflect its expanded support for multiple AI CLI tools.
 
-An MCP (Model Context Protocol) server that allows running AI CLI tools (Claude and Codex) in background processes with automatic permission handling.
+An MCP (Model Context Protocol) server that allows running AI CLI tools (Claude, Codex, and Gemini) in background processes with automatic permission handling.
 
 Did you notice that Cursor sometimes struggles with complex, multi-step edits or operations? This server, with its powerful unified `run` tool, enables multiple AI agents to handle your coding tasks more effectively.
 
@@ -17,7 +17,8 @@ This MCP server provides tools that can be used by LLMs to interact with AI CLI 
 
 - Run Claude CLI with all permissions bypassed (using `--dangerously-skip-permissions`)
 - Execute Codex CLI with automatic approval mode (using `--full-auto`)
-- Support multiple AI models: Claude (sonnet, opus, haiku) and Codex (gpt-5-low, gpt-5-medium, gpt-5-high)
+- Execute Gemini CLI with automatic approval mode (using `-y`)
+- Support multiple AI models: Claude (sonnet, opus, haiku), Codex (gpt-5-low, gpt-5-medium, gpt-5-high), and Gemini (gemini-2.5-pro, gemini-2.5-flash)
 - Manage background processes with PID tracking
 - Parse and return structured outputs from both tools
 
@@ -34,6 +35,7 @@ This MCP server provides tools that can be used by LLMs to interact with AI CLI 
 - Node.js v20 or later (Use fnm or nvm to install)
 - Claude CLI installed locally (run it and call /doctor) and `--dangerously-skip-permissions` accepted
 - Codex CLI installed (optional, for Codex support)
+- Gemini CLI installed (optional, for Gemini support)
 
 ## Configuration
 
@@ -41,9 +43,10 @@ This MCP server provides tools that can be used by LLMs to interact with AI CLI 
 
 - `CLAUDE_CLI_NAME`: Override the Claude CLI binary name or provide an absolute path (default: `claude`)
 - `CODEX_CLI_NAME`: Override the Codex CLI binary name or provide an absolute path (default: `codex`)
+- `GEMINI_CLI_NAME`: Override the Gemini CLI binary name or provide an absolute path (default: `gemini`)
 - `MCP_CLAUDE_DEBUG`: Enable debug logging (set to `true` for verbose output)
 
-Both CLI name variables support:
+All CLI name variables support:
 - Simple name: `CLAUDE_CLI_NAME=claude-custom` or `CODEX_CLI_NAME=codex-v2`
 - Absolute path: `CLAUDE_CLI_NAME=/path/to/custom/claude`
 
@@ -108,7 +111,15 @@ Follow the prompts to accept. Once this is done, the MCP server will be able to 
 codex login
 ```
 
-macOS might ask for folder permissions the first time either tool runs. If the first run fails, subsequent runs should work.
+### For Gemini CLI:
+
+**For Gemini, ensure you're logged in and have configured your credentials:**
+
+```bash
+gemini auth login
+```
+
+macOS might ask for folder permissions the first time any of these tools run. If the first run fails, subsequent runs should work.
 
 ## Connecting to Your MCP Client
 
@@ -151,6 +162,7 @@ Executes a prompt using either Claude CLI or Codex CLI. The appropriate CLI is a
 - `model` (string, optional): The model to use:
   - Claude models: "sonnet", "opus", "haiku"
   - Codex models: "gpt-5-low", "gpt-5-medium", "gpt-5-high"
+  - Gemini models: "gemini-2.5-pro", "gemini-2.5-flash"
 - `session_id` (string, optional): Optional session ID to resume a previous session. Supported for: haiku, sonnet, opus.
 
 ### `list_processes`
@@ -191,6 +203,18 @@ Terminates a running AI agent process by PID.
     "prompt": "Create a REST API with Express.js",
     "workFolder": "/Users/username/my_project",
     "model": "gpt-5-high"
+  }
+}
+```
+
+**Example with Gemini:**
+```json
+{
+  "toolName": "run",
+  "arguments": {
+    "prompt": "Generate unit tests for the Calculator class",
+    "workFolder": "/Users/username/my_project",
+    "model": "gemini-2.5-pro"
   }
 }
 ```
@@ -303,6 +327,31 @@ npm run test:coverage
 ```
 
 For detailed testing documentation, see our [E2E Testing Guide](./docs/e2e-testing.md).
+
+## Manual Testing with MCP Inspector
+
+You can manually test the MCP server using the Model Context Protocol Inspector:
+
+```bash
+# Build the project first
+npm run build
+
+# Start the MCP Inspector with the server
+npx @modelcontextprotocol/inspector node dist/server.js
+```
+
+This will open a web interface where you can:
+1. View all available tools (`run`, `list_processes`, `get_result`, `kill_process`)
+2. Test each tool with different parameters
+3. Test different AI models including:
+   - Claude models: `sonnet`, `opus`, `haiku`
+   - Codex models: `gpt-5-low`, `gpt-5-medium`, `gpt-5-high`
+   - Gemini models: `gemini-2.5-pro`, `gemini-2.5-flash`
+
+Example test: Select the `run` tool and provide:
+- `prompt`: "What is 2+2?"
+- `workFolder`: "/tmp"
+- `model`: "gemini-2.5-flash"
 
 ## Configuration via Environment Variables
 
