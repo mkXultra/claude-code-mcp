@@ -47,6 +47,13 @@ interface ClaudeProcess {
   exitCode?: number;
 }
 
+// Type definition for list_processes return value
+interface ProcessListItem {
+  pid: number;                                // プロセスID
+  agent: 'claude' | 'codex' | 'gemini';      // エージェントタイプ
+  status: 'running' | 'completed' | 'failed'; // プロセスの状態
+}
+
 // Global process manager
 const processManager = new Map<number, ClaudeProcess>();
 
@@ -372,7 +379,7 @@ export class ClaudeCodeServer {
         },
         {
           name: 'list_processes',
-          description: 'List all running and completed AI agent processes with their status, PID, and basic info.',
+          description: 'List all running and completed AI agent processes. Returns a simple list with PID, agent type, and status for each process.',
           inputSchema: {
             type: 'object',
             properties: {},
@@ -405,6 +412,14 @@ export class ClaudeCodeServer {
             },
             required: ['pid'],
           },
+        },
+        {
+          name: 'cleanup_processes',
+          description: 'Remove all completed and failed processes from the process list to free up memory.',
+          inputSchema: {
+            type: 'object',
+            properties: {},
+          },
         }
       ],
     }));
@@ -427,6 +442,8 @@ export class ClaudeCodeServer {
           return this.handleGetResult(toolArguments);
         case 'kill_process':
           return this.handleKillProcess(toolArguments);
+        case 'cleanup_processes':
+          return this.handleCleanupProcesses();
         default:
           throw new McpError(ErrorCode.MethodNotFound, `Tool ${toolName} not found`);
       }
@@ -628,31 +645,14 @@ export class ClaudeCodeServer {
    * Handle list_processes tool
    */
   private async handleListProcesses(): Promise<ServerResult> {
-    const processes: any[] = [];
-    
+    const processes: ProcessListItem[] = [];
+
     for (const [pid, process] of processManager.entries()) {
-      const processInfo: any = {
+      const processInfo: ProcessListItem = {
         pid,
         agent: process.toolType,
-        status: process.status,
-        startTime: process.startTime,
-        prompt: process.prompt.substring(0, 100) + (process.prompt.length > 100 ? '...' : ''),
-        workFolder: process.workFolder,
-        model: process.model,
-        exitCode: process.exitCode
+        status: process.status
       };
-
-      // Try to extract session_id from JSON output if available
-      if (process.stdout) {
-        try {
-          const claudeOutput = JSON.parse(process.stdout);
-          if (claudeOutput.session_id) {
-            processInfo.session_id = claudeOutput.session_id;
-          }
-        } catch (e) {
-          // Ignore parsing errors
-        }
-      }
 
       processes.push(processInfo);
     }
@@ -771,6 +771,32 @@ export class ClaudeCodeServer {
     } catch (error: any) {
       throw new McpError(ErrorCode.InternalError, `Failed to terminate process: ${error.message}`);
     }
+  }
+
+  /**
+   * Handle cleanup_processes tool
+   */
+  private async handleCleanupProcesses(): Promise<ServerResult> {
+    const removedPids: number[] = [];
+
+    // Iterate through all processes and collect PIDs to remove
+    for (const [pid, process] of processManager.entries()) {
+      if (process.status === 'completed' || process.status === 'failed') {
+        removedPids.push(pid);
+        processManager.delete(pid);
+      }
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          removed: removedPids.length,
+          removedPids,
+          message: `Cleaned up ${removedPids.length} finished process(es)`
+        }, null, 2)
+      }]
+    };
   }
 
   /**
