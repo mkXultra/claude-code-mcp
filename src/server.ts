@@ -16,7 +16,7 @@ import * as path from 'path';
 import { parseCodexOutput, parseClaudeOutput, parseGeminiOutput } from './parsers.js';
 
 // Server version - update this when releasing new versions
-const SERVER_VERSION = "2.1.0";
+const SERVER_VERSION = "2.2.0";
 
 // Model alias mappings for user-friendly model names
 const MODEL_ALIASES: Record<string, string> = {
