@@ -40,13 +40,13 @@ describe('Claude Code MCP E2E Tests', () => {
   });
 
   describe('Tool Registration', () => {
-    it('should register claude_code tool', async () => {
+    it('should register run tool', async () => {
       const tools = await client.listTools();
       
       expect(tools).toHaveLength(4);
-      const claudeCodeTool = tools.find((t: any) => t.name === 'claude_code');
+      const claudeCodeTool = tools.find((t: any) => t.name === 'run');
       expect(claudeCodeTool).toEqual({
-        name: 'claude_code',
+        name: 'run',
         description: expect.stringContaining('Claude Code Agent'),
         inputSchema: {
           type: 'object',
@@ -77,15 +77,15 @@ describe('Claude Code MCP E2E Tests', () => {
       });
       
       // Verify other tools exist
-      expect(tools.some((t: any) => t.name === 'list_claude_processes')).toBe(true);
-      expect(tools.some((t: any) => t.name === 'get_claude_result')).toBe(true);
-      expect(tools.some((t: any) => t.name === 'kill_claude_process')).toBe(true);
+      expect(tools.some((t: any) => t.name === 'list_processes')).toBe(true);
+      expect(tools.some((t: any) => t.name === 'get_result')).toBe(true);
+      expect(tools.some((t: any) => t.name === 'kill_process')).toBe(true);
     });
   });
 
   describe('Basic Operations', () => {
     it('should execute a simple prompt', async () => {
-      const response = await client.callTool('claude_code', {
+      const response = await client.callTool('run', {
         prompt: 'create a file called test.txt with content "Hello World"',
         workFolder: testDir,
       });
@@ -97,8 +97,8 @@ describe('Claude Code MCP E2E Tests', () => {
     });
 
     it('should handle process management correctly', async () => {
-      // claude_code now returns a PID immediately
-      const response = await client.callTool('claude_code', {
+      // run now returns a PID immediately
+      const response = await client.callTool('run', {
         prompt: 'error',
         workFolder: testDir,
       });
@@ -116,7 +116,7 @@ describe('Claude Code MCP E2E Tests', () => {
 
     it('should reject missing workFolder', async () => {
       await expect(
-        client.callTool('claude_code', {
+        client.callTool('run', {
           prompt: 'List files in current directory',
         })
       ).rejects.toThrow(/workFolder/i);
@@ -125,7 +125,7 @@ describe('Claude Code MCP E2E Tests', () => {
 
   describe('Working Directory Handling', () => {
     it('should respect custom working directory', async () => {
-      const response = await client.callTool('claude_code', {
+      const response = await client.callTool('run', {
         prompt: 'Show current working directory',
         workFolder: testDir,
       });
@@ -137,7 +137,7 @@ describe('Claude Code MCP E2E Tests', () => {
       const nonExistentDir = join(testDir, 'non-existent');
       
       await expect(
-        client.callTool('claude_code', {
+        client.callTool('run', {
           prompt: 'Test prompt',
           workFolder: nonExistentDir,
         })
@@ -154,8 +154,8 @@ describe('Claude Code MCP E2E Tests', () => {
   });
 
   describe('Model Alias Handling', () => {
-    it('should resolve haiku alias when calling claude_code', async () => {
-      const response = await client.callTool('claude_code', {
+    it('should resolve haiku alias when calling run', async () => {
+      const response = await client.callTool('run', {
         prompt: 'Test with haiku model',
         workFolder: testDir,
         model: 'haiku'
@@ -173,7 +173,7 @@ describe('Claude Code MCP E2E Tests', () => {
       
       // Get the PID and check the process
       const pid = parseInt(pidMatch![1]);
-      const processes = await client.callTool('list_claude_processes', {});
+      const processes = await client.callTool('list_processes', {});
       const processesText = processes[0].text;
       const processData = JSON.parse(processesText);
       
@@ -186,7 +186,7 @@ describe('Claude Code MCP E2E Tests', () => {
     });
 
     it('should pass non-alias model names unchanged', async () => {
-      const response = await client.callTool('claude_code', {
+      const response = await client.callTool('run', {
         prompt: 'Test with sonnet model',
         workFolder: testDir,
         model: 'sonnet'
@@ -203,7 +203,7 @@ describe('Claude Code MCP E2E Tests', () => {
       const pid = parseInt(pidMatch![1]);
       
       // Check the process
-      const processes = await client.callTool('list_claude_processes', {});
+      const processes = await client.callTool('list_processes', {});
       const processesText = processes[0].text;
       const processData = JSON.parse(processesText);
       
@@ -216,7 +216,7 @@ describe('Claude Code MCP E2E Tests', () => {
     });
     
     it('should work without specifying a model', async () => {
-      const response = await client.callTool('claude_code', {
+      const response = await client.callTool('run', {
         prompt: 'Test without model parameter',
         workFolder: testDir
       });
@@ -231,7 +231,7 @@ describe('Claude Code MCP E2E Tests', () => {
   describe('Debug Mode', () => {
     it('should log debug information when enabled', async () => {
       // Debug logs go to stderr, which we capture in the client
-      const response = await client.callTool('claude_code', {
+      const response = await client.callTool('run', {
         prompt: 'Debug test prompt',
         workFolder: testDir,
       });
@@ -265,7 +265,7 @@ describe('Integration Tests (Local Only)', () => {
   it.skip('should create a file with real Claude CLI', async () => {
     await client.connect();
     
-    const response = await client.callTool('claude_code', {
+    const response = await client.callTool('run', {
       prompt: 'Create a file called hello.txt with content "Hello from Claude"',
       workFolder: testDir,
     });
@@ -279,7 +279,7 @@ describe('Integration Tests (Local Only)', () => {
     await client.connect();
     
     // Initialize git repo
-    const response = await client.callTool('claude_code', {
+    const response = await client.callTool('run', {
       prompt: 'Initialize a git repository and create a README.md file',
       workFolder: testDir,
     });

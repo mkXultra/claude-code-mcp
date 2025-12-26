@@ -25,11 +25,13 @@ vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
     MethodNotFound: 'MethodNotFound',
     InvalidParams: 'InvalidParams'
   },
-  McpError: vi.fn().mockImplementation((code, message) => {
-    const error = new Error(message);
-    (error as any).code = code;
-    return error;
-  })
+  McpError: class extends Error {
+    code: any;
+    constructor(code: any, message: string) {
+      super(message);
+      this.code = code;
+    }
+  }
 }));
 vi.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
   Server: vi.fn().mockImplementation(function(this: any) {
@@ -439,12 +441,14 @@ describe('ClaudeCodeServer Unit Tests', () => {
       const handler = listToolsCall[1];
       const result = await handler();
       
-      expect(result.tools).toHaveLength(4);
-      expect(result.tools[0].name).toBe('claude_code');
-      expect(result.tools[0].description).toContain('Claude Code Agent');
-      expect(result.tools[1].name).toBe('list_claude_processes');
-      expect(result.tools[2].name).toBe('get_claude_result');
-      expect(result.tools[3].name).toBe('kill_claude_process');
+      expect(result.tools).toHaveLength(6);
+      expect(result.tools[0].name).toBe('run');
+      expect(result.tools[0].description).toContain('AI Agent Runner');
+      expect(result.tools[1].name).toBe('list_processes');
+      expect(result.tools[2].name).toBe('get_result');
+      expect(result.tools[3].name).toBe('wait');
+      expect(result.tools[4].name).toBe('kill_process');
+      expect(result.tools[5].name).toBe('cleanup_processes');
     });
 
     it('should handle CallToolRequest', async () => {
@@ -483,7 +487,7 @@ describe('ClaudeCodeServer Unit Tests', () => {
       const handler = callToolCall[1];
       const result = await handler({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: 'test prompt',
             workFolder: '/tmp'
@@ -491,7 +495,7 @@ describe('ClaudeCodeServer Unit Tests', () => {
         }
       });
       
-      // claude_code now returns PID immediately
+      // run now returns PID immediately
       expect(result.content[0].type).toBe('text');
       const response = JSON.parse(result.content[0].text);
       expect(response.pid).toBe(12345);
@@ -519,14 +523,19 @@ describe('ClaudeCodeServer Unit Tests', () => {
       const handler = callToolCall[1];
       
       // Test missing workFolder
-      await expect(handler({
-        params: {
-          name: 'claude_code',
-          arguments: {
-            prompt: 'test'
+      try {
+        await handler({
+          params: {
+            name: 'run',
+            arguments: {
+              prompt: 'test'
+            }
           }
-        }
-      })).rejects.toThrow('Missing or invalid required parameter: workFolder');
+        });
+        expect.fail('Should have thrown');
+      } catch (error: any) {
+        expect(error.message).toContain('Missing or invalid required parameter: workFolder');
+      }
     });
 
     it('should handle non-existent workFolder', async () => {
@@ -555,17 +564,20 @@ describe('ClaudeCodeServer Unit Tests', () => {
       const handler = callToolCall[1];
       
       // Should throw error for non-existent workFolder
-      await expect(
-        handler({
+      try {
+        await handler({
           params: {
-            name: 'claude_code',
+            name: 'run',
             arguments: {
               prompt: 'test',
               workFolder: '/nonexistent'
             }
           }
-        })
-      ).rejects.toThrow('Working folder does not exist');
+        });
+        expect.fail('Should have thrown');
+      } catch (error: any) {
+        expect(error.message).toContain('Working folder does not exist');
+      }
     });
 
     it('should handle session_id parameter', async () => {
@@ -600,7 +612,7 @@ describe('ClaudeCodeServer Unit Tests', () => {
       
       const result = await handler({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: 'test prompt',
             workFolder: '/tmp',
@@ -661,7 +673,7 @@ describe('ClaudeCodeServer Unit Tests', () => {
       
       const result = await handler({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt_file: '/tmp/prompt.txt',
             workFolder: '/tmp'
@@ -677,7 +689,7 @@ describe('ClaudeCodeServer Unit Tests', () => {
       );
     });
 
-    it('should resolve model aliases when calling claude_code tool', async () => {
+    it('should resolve model aliases when calling run tool', async () => {
       mockHomedir.mockReturnValue('/home/user');
       mockExistsSync.mockReturnValue(true);
       
@@ -707,7 +719,7 @@ describe('ClaudeCodeServer Unit Tests', () => {
       // Test with haiku alias
       const result = await handler({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: 'test prompt',
             workFolder: '/tmp',
@@ -757,7 +769,7 @@ describe('ClaudeCodeServer Unit Tests', () => {
       // Test with non-alias model name
       const result = await handler({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: 'test prompt',
             workFolder: '/tmp',
@@ -798,7 +810,7 @@ describe('ClaudeCodeServer Unit Tests', () => {
       try {
         await handler({
           params: {
-            name: 'claude_code',
+            name: 'run',
             arguments: {
               prompt: 'test prompt',
               prompt_file: '/tmp/prompt.txt',
@@ -836,7 +848,7 @@ describe('ClaudeCodeServer Unit Tests', () => {
       try {
         await handler({
           params: {
-            name: 'claude_code',
+            name: 'run',
             arguments: {
               workFolder: '/tmp'
             }

@@ -339,7 +339,7 @@ export class ClaudeCodeServer {
 **IMPORTANT**: This tool now returns immediately with a PID. Use other tools to check status and get results.
 
 **Supported models**:
-"sonnet", "opus", "haiku", "gpt-5-low", "gpt-5-medium", "gpt-5-high", "gemini-2.5-pro", "gemini-2.5-flash"
+"sonnet", "opus", "haiku", "gpt-5-low", "gpt-5-medium", "gpt-5-high", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-3-pro-preview"
 
 **Prompt input**: You must provide EITHER prompt (string) OR prompt_file (file path), but not both.
 
@@ -367,11 +367,11 @@ export class ClaudeCodeServer {
               },
               model: {
                 type: 'string',
-                description: 'The model to use: "sonnet", "opus", "haiku", "gpt-5-low", "gpt-5-medium", "gpt-5-high", "gemini-2.5-pro", "gemini-2.5-flash".',
+                description: 'The model to use: "sonnet", "opus", "haiku", "gpt-5-low", "gpt-5-medium", "gpt-5-high", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-3-pro-preview".',
               },
               session_id: {
                 type: 'string',
-                description: 'Optional session ID to resume a previous session. Supported for: haiku, sonnet, opus.',
+                description: 'Optional session ID to resume a previous session. Supported for: haiku, sonnet, opus, gemini-2.5-pro, gemini-2.5-flash, gemini-3-pro-preview.',
               },
             },
             required: ['workFolder'],
@@ -397,6 +397,25 @@ export class ClaudeCodeServer {
               },
             },
             required: ['pid'],
+          },
+        },
+        {
+          name: 'wait',
+          description: 'Wait for multiple AI agent processes to complete and return their results. Blocks until all specified PIDs finish or timeout occurs.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              pids: {
+                type: 'array',
+                items: { type: 'number' },
+                description: 'List of process IDs to wait for (returned by the run tool).',
+              },
+              timeout: {
+                type: 'number',
+                description: 'Optional: Maximum time to wait in seconds. Defaults to 180 (3 minutes).',
+              },
+            },
+            required: ['pids'],
           },
         },
         {
@@ -440,6 +459,8 @@ export class ClaudeCodeServer {
           return this.handleListProcesses();
         case 'get_result':
           return this.handleGetResult(toolArguments);
+        case 'wait':
+          return this.handleWait(toolArguments);
         case 'kill_process':
           return this.handleKillProcess(toolArguments);
         case 'cleanup_processes':
@@ -541,6 +562,11 @@ export class ClaudeCodeServer {
       // Handle Gemini
       cliPath = this.geminiCliPath;
       processArgs = ['-y', '--output-format', 'json'];
+
+      // Add session_id if provided
+      if (toolArguments.session_id && typeof toolArguments.session_id === 'string') {
+        processArgs.push('-r', toolArguments.session_id);
+      }
 
       // Add model if specified
       if (toolArguments.model) {
@@ -666,14 +692,9 @@ export class ClaudeCodeServer {
   }
 
   /**
-   * Handle get_result tool
+   * Helper to get process result object
    */
-  private async handleGetResult(toolArguments: any): Promise<ServerResult> {
-    if (!toolArguments.pid || typeof toolArguments.pid !== 'number') {
-      throw new McpError(ErrorCode.InvalidParams, 'Missing or invalid required parameter: pid');
-    }
-
-    const pid = toolArguments.pid;
+  private getProcessResultHelper(pid: number): any {
     const process = processManager.get(pid);
 
     if (!process) {
@@ -707,8 +728,8 @@ export class ClaudeCodeServer {
     // If we have valid output from agent, include it
     if (agentOutput) {
       response.agentOutput = agentOutput;
-      // Extract session_id if available (Claude only)
-      if (process.toolType === 'claude' && agentOutput.session_id) {
+      // Extract session_id if available (Claude and Gemini)
+      if ((process.toolType === 'claude' || process.toolType === 'gemini') && agentOutput.session_id) {
         response.session_id = agentOutput.session_id;
       }
     } else {
@@ -716,6 +737,20 @@ export class ClaudeCodeServer {
       response.stdout = process.stdout;
       response.stderr = process.stderr;
     }
+    
+    return response;
+  }
+
+  /**
+   * Handle get_result tool
+   */
+  private async handleGetResult(toolArguments: any): Promise<ServerResult> {
+    if (!toolArguments.pid || typeof toolArguments.pid !== 'number') {
+      throw new McpError(ErrorCode.InvalidParams, 'Missing or invalid required parameter: pid');
+    }
+
+    const pid = toolArguments.pid;
+    const response = this.getProcessResultHelper(pid);
 
     return {
       content: [{
@@ -726,8 +761,69 @@ export class ClaudeCodeServer {
   }
 
   /**
+   * Handle wait tool
+   */
+  private async handleWait(toolArguments: any): Promise<ServerResult> {
+    if (!toolArguments.pids || !Array.isArray(toolArguments.pids) || toolArguments.pids.length === 0) {
+      throw new McpError(ErrorCode.InvalidParams, 'Missing or invalid required parameter: pids (must be a non-empty array of numbers)');
+    }
+
+    const pids: number[] = toolArguments.pids;
+    // Default timeout: 3 minutes (180 seconds)
+    const timeoutSeconds = typeof toolArguments.timeout === 'number' ? toolArguments.timeout : 180;
+    const timeoutMs = timeoutSeconds * 1000;
+
+    // Validate all PIDs exist first
+    for (const pid of pids) {
+      if (!processManager.has(pid)) {
+        throw new McpError(ErrorCode.InvalidParams, `Process with PID ${pid} not found`);
+      }
+    }
+
+    // Create promises for each process
+    const waitPromises = pids.map(pid => {
+      const processEntry = processManager.get(pid)!;
+      
+      if (processEntry.status !== 'running') {
+        return Promise.resolve();
+      }
+
+      return new Promise<void>((resolve) => {
+        processEntry.process.once('close', () => {
+          resolve();
+        });
+      });
+    });
+
+    // Create a timeout promise
+    const timeoutPromise = new Promise<void>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Timed out after ${timeoutSeconds} seconds waiting for processes`));
+      }, timeoutMs);
+    });
+
+    try {
+      // Wait for all processes to finish or timeout
+      await Promise.race([Promise.all(waitPromises), timeoutPromise]);
+    } catch (error: any) {
+      throw new McpError(ErrorCode.InternalError, error.message);
+    }
+
+    // Collect results
+    const results = pids.map(pid => this.getProcessResultHelper(pid));
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(results, null, 2)
+      }]
+    };
+  }
+
+  /**
    * Handle kill_process tool
    */
+
   private async handleKillProcess(toolArguments: any): Promise<ServerResult> {
     if (!toolArguments.pid || typeof toolArguments.pid !== 'number') {
       throw new McpError(ErrorCode.InvalidParams, 'Missing or invalid required parameter: pid');

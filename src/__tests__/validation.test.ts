@@ -214,7 +214,7 @@ describe('Argument Validation Tests', () => {
       await expect(
         handler({
           params: {
-            name: 'claude_code',
+            name: 'run',
             arguments: {
               prompt: 'test',
               workFolder: 123 // Invalid type
@@ -245,7 +245,7 @@ describe('Argument Validation Tests', () => {
       await expect(
         handler({
           params: {
-            name: 'claude_code',
+            name: 'run',
             arguments: {
               prompt: '', // Empty prompt
               workFolder: '/tmp'

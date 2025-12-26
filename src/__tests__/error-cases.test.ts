@@ -33,11 +33,13 @@ vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
     MethodNotFound: 'MethodNotFound',
     InvalidParams: 'InvalidParams'
   },
-  McpError: vi.fn().mockImplementation((code, message) => {
-    const error = new Error(message);
-    (error as any).code = code;
-    return error;
-  })
+  McpError: class extends Error {
+    code: any;
+    constructor(code: any, message: string) {
+      super(message);
+      this.code = code;
+    }
+  }
 }));
 
 const mockExistsSync = vi.mocked(existsSync);
@@ -148,7 +150,7 @@ describe('Error Handling Tests', () => {
       try {
         await callToolHandler({
           params: {
-            name: 'claude_code',
+            name: 'run',
             arguments: {
               prompt: 'test',
               workFolder: '/tmp'
@@ -160,7 +162,7 @@ describe('Error Handling Tests', () => {
         // Check if McpError was called with the process start failure message
         expect(McpError).toHaveBeenCalledWith(
           'InternalError',
-          'Failed to start Claude CLI process'
+          'Failed to start claude CLI process'
         );
       }
     });
@@ -185,7 +187,7 @@ describe('Error Handling Tests', () => {
       await expect(
         handler({
           params: {
-            name: 'claude_code',
+            name: 'run',
             arguments: 'invalid-should-be-object'
           }
         })
@@ -244,7 +246,7 @@ describe('Error Handling Tests', () => {
       await expect(
         handler({
           params: {
-            name: 'claude_code',
+            name: 'run',
             arguments: {
               prompt: 'test',
               workFolder: '/tmp'

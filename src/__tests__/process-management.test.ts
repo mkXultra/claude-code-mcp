@@ -88,7 +88,7 @@ describe('Process Management Tests', () => {
     return { server, module, handlers };
   }
 
-  describe('claude_code tool with PID return', () => {
+  describe('run tool with PID return', () => {
     it('should return PID immediately when starting a process', async () => {
       const { handlers } = await setupServer();
       
@@ -104,7 +104,7 @@ describe('Process Management Tests', () => {
       const callToolHandler = handlers.get('callTool')!;
       const result = await callToolHandler!({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: 'test prompt',
             workFolder: '/tmp'
@@ -115,7 +115,7 @@ describe('Process Management Tests', () => {
       const response = JSON.parse(result.content[0].text);
       expect(response.pid).toBe(12345);
       expect(response.status).toBe('started');
-      expect(response.message).toBe('Claude Code process started successfully');
+      expect(response.message).toBe('claude process started successfully');
     });
 
     it('should handle process with model parameter', async () => {
@@ -132,7 +132,7 @@ describe('Process Management Tests', () => {
       const callToolHandler = handlers.get('callTool')!;
       await callToolHandler!({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: 'test prompt',
             workFolder: '/tmp',
@@ -167,7 +167,7 @@ describe('Process Management Tests', () => {
       const callToolHandler = handlers.get('callTool')!;
       const result = await callToolHandler!({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: japanesePrompt,
             workFolder: '/tmp'
@@ -189,7 +189,7 @@ describe('Process Management Tests', () => {
       // Verify the prompt is stored correctly in process manager
       const getResult = await callToolHandler!({
         params: {
-          name: 'get_claude_result',
+          name: 'get_result',
           arguments: {
             pid: 12360
           }
@@ -240,7 +240,7 @@ describe('Process Management Tests', () => {
       const callToolHandler = handlers.get('callTool')!;
       const result = await callToolHandler!({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: longJapanesePrompt,
             workFolder: '/tmp',
@@ -260,10 +260,10 @@ describe('Process Management Tests', () => {
         expect.any(Object)
       );
       
-      // Check list_claude_processes truncates long prompts correctly
+      // Check list_processes truncates long prompts correctly
       const listResult = await callToolHandler!({
         params: {
-          name: 'list_claude_processes',
+          name: 'list_processes',
           arguments: {}
         }
       });
@@ -298,7 +298,7 @@ Unicodeテスト: 🎌 🗾 ✨
       const callToolHandler = handlers.get('callTool')!;
       const result = await callToolHandler!({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: specialPrompt,
             workFolder: '/tmp'
@@ -331,7 +331,7 @@ Unicodeテスト: 🎌 🗾 ✨
       const callToolHandler = handlers.get('callTool')!;
       await expect(callToolHandler!({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: 'test prompt',
             workFolder: '/tmp/test'
@@ -341,7 +341,7 @@ Unicodeテスト: 🎌 🗾 ✨
     });
   });
 
-  describe('list_claude_processes tool', () => {
+  describe('list_processes tool', () => {
     it('should list all processes', async () => {
       const { handlers } = await setupServer();
       
@@ -359,7 +359,7 @@ Unicodeテスト: 🎌 🗾 ✨
       // Start a process
       await callToolHandler!({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: 'test prompt for listing',
             workFolder: '/tmp',
@@ -378,7 +378,7 @@ Unicodeテスト: 🎌 🗾 ✨
       // List processes
       const listResult = await callToolHandler!({
         params: {
-          name: 'list_claude_processes',
+          name: 'list_processes',
           arguments: {}
         }
       });
@@ -409,7 +409,7 @@ Unicodeテスト: 🎌 🗾 ✨
       const longPrompt = 'a'.repeat(150);
       await callToolHandler!({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: longPrompt,
             workFolder: '/tmp'
@@ -420,7 +420,7 @@ Unicodeテスト: 🎌 🗾 ✨
       // List processes
       const listResult = await callToolHandler!({
         params: {
-          name: 'list_claude_processes',
+          name: 'list_processes',
           arguments: {}
         }
       });
@@ -431,7 +431,7 @@ Unicodeテスト: 🎌 🗾 ✨
     });
   });
 
-  describe('get_claude_result tool', () => {
+  describe('get_result tool', () => {
     it('should get process output', async () => {
       const { handlers } = await setupServer();
       
@@ -448,7 +448,7 @@ Unicodeテスト: 🎌 🗾 ✨
       // Start a process
       await callToolHandler!({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: 'test prompt',
             workFolder: '/tmp'
@@ -468,7 +468,7 @@ Unicodeテスト: 🎌 🗾 ✨
       // Get result
       const result = await callToolHandler!({
         params: {
-          name: 'get_claude_result',
+          name: 'get_result',
           arguments: {
             pid: 12349
           }
@@ -498,7 +498,7 @@ Unicodeテスト: 🎌 🗾 ✨
       // Start a process
       await callToolHandler!({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: 'test prompt',
             workFolder: '/tmp'
@@ -519,7 +519,7 @@ Unicodeテスト: 🎌 🗾 ✨
       // Get result
       const result = await callToolHandler!({
         params: {
-          name: 'get_claude_result',
+          name: 'get_result',
           arguments: {
             pid: 12350
           }
@@ -540,7 +540,7 @@ Unicodeテスト: 🎌 🗾 ✨
       
       await expect(callToolHandler!({
         params: {
-          name: 'get_claude_result',
+          name: 'get_result',
           arguments: {
             pid: 99999
           }
@@ -555,7 +555,7 @@ Unicodeテスト: 🎌 🗾 ✨
       
       await expect(callToolHandler!({
         params: {
-          name: 'get_claude_result',
+          name: 'get_result',
           arguments: {
             pid: 'not-a-number'
           }
@@ -579,7 +579,7 @@ Unicodeテスト: 🎌 🗾 ✨
       // Start a process
       await callToolHandler!({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: 'test prompt',
             workFolder: '/tmp'
@@ -594,7 +594,7 @@ Unicodeテスト: 🎌 🗾 ✨
       // Get result
       const result = await callToolHandler!({
         params: {
-          name: 'get_claude_result',
+          name: 'get_result',
           arguments: {
             pid: 12355
           }
@@ -611,7 +611,7 @@ Unicodeテスト: 🎌 🗾 ✨
     });
   });
 
-  describe('kill_claude_process tool', () => {
+  describe('kill_process tool', () => {
     it('should kill a running process', async () => {
       const { handlers } = await setupServer();
       
@@ -628,7 +628,7 @@ Unicodeテスト: 🎌 🗾 ✨
       // Start a process
       await callToolHandler!({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: 'test prompt',
             workFolder: '/tmp'
@@ -639,7 +639,7 @@ Unicodeテスト: 🎌 🗾 ✨
       // Kill the process
       const killResult = await callToolHandler!({
         params: {
-          name: 'kill_claude_process',
+          name: 'kill_process',
           arguments: {
             pid: 12351
           }
@@ -668,7 +668,7 @@ Unicodeテスト: 🎌 🗾 ✨
       // Start and complete a process
       await callToolHandler!({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: 'test prompt',
             workFolder: '/tmp'
@@ -682,7 +682,7 @@ Unicodeテスト: 🎌 🗾 ✨
       // Try to kill the already completed process
       const killResult = await callToolHandler!({
         params: {
-          name: 'kill_claude_process',
+          name: 'kill_process',
           arguments: {
             pid: 12352
           }
@@ -702,7 +702,7 @@ Unicodeテスト: 🎌 🗾 ✨
       
       await expect(callToolHandler!({
         params: {
-          name: 'kill_claude_process',
+          name: 'kill_process',
           arguments: {
             pid: 99999
           }
@@ -743,7 +743,7 @@ Unicodeテスト: 🎌 🗾 ✨
       // Start a process
       await callToolHandler!({
         params: {
-          name: 'claude_code',
+          name: 'run',
           arguments: {
             prompt: 'test prompt',
             workFolder: '/tmp'
@@ -757,7 +757,7 @@ Unicodeテスト: 🎌 🗾 ✨
       // Get result to check error was recorded
       const result = await callToolHandler!({
         params: {
-          name: 'get_claude_result',
+          name: 'get_result',
           arguments: {
             pid: 12353
           }

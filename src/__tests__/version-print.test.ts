@@ -42,7 +42,7 @@ describe('Version Print on First Use', () => {
 
   it('should print version and startup time only on first use', async () => {
     // First tool call
-    await client.callTool('claude_code', {
+    await client.callTool('run', {
       prompt: 'echo "test 1"',
       workFolder: testDir,
     });
@@ -51,20 +51,20 @@ describe('Version Print on First Use', () => {
     const findVersionCall = (calls: any[][]) => {
       return calls.find(call => {
         const str = call[1] || call[0]; // message might be first or second param
-        return typeof str === 'string' && str.includes('claude_code v') && str.includes('started at');
+        return typeof str === 'string' && str.includes('ai_cli_mcp v') && str.includes('started at');
       });
     };
     
     // Check that version was printed on first use
     const versionCall = findVersionCall(consoleErrorSpy.mock.calls);
     expect(versionCall).toBeDefined();
-    expect(versionCall![1]).toMatch(/claude_code v[0-9]+\.[0-9]+\.[0-9]+ started at \d{4}-\d{2}-\d{2}T/);
+    expect(versionCall![1]).toMatch(/ai_cli_mcp v[0-9]+\.[0-9]+\.[0-9]+ started at \d{4}-\d{2}-\d{2}T/);
     
     // Clear the spy but keep the spy active
     consoleErrorSpy.mockClear();
     
     // Second tool call
-    await client.callTool('claude_code', {
+    await client.callTool('run', {
       prompt: 'echo "test 2"',
       workFolder: testDir,
     });
@@ -74,7 +74,7 @@ describe('Version Print on First Use', () => {
     expect(secondVersionCall).toBeUndefined();
     
     // Third tool call
-    await client.callTool('claude_code', {
+    await client.callTool('run', {
       prompt: 'echo "test 3"',
       workFolder: testDir,
     });

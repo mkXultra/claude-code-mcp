@@ -39,7 +39,7 @@ describe('Claude Code Edge Cases', () => {
   describe('Input Validation', () => {
     it('should reject missing prompt', async () => {
       await expect(
-        client.callTool('claude_code', {
+        client.callTool('run', {
           workFolder: testDir,
         })
       ).rejects.toThrow(/prompt/i);
@@ -47,7 +47,7 @@ describe('Claude Code Edge Cases', () => {
 
     it('should reject invalid prompt type', async () => {
       await expect(
-        client.callTool('claude_code', {
+        client.callTool('run', {
           prompt: 123, // Should be string
           workFolder: testDir,
         })
@@ -56,7 +56,7 @@ describe('Claude Code Edge Cases', () => {
 
     it('should reject invalid workFolder type', async () => {
       await expect(
-        client.callTool('claude_code', {
+        client.callTool('run', {
           prompt: 'Test prompt',
           workFolder: 123, // Should be string
         })
@@ -65,7 +65,7 @@ describe('Claude Code Edge Cases', () => {
 
     it('should reject empty prompt', async () => {
       await expect(
-        client.callTool('claude_code', {
+        client.callTool('run', {
           prompt: '',
           workFolder: testDir,
         })
@@ -76,7 +76,7 @@ describe('Claude Code Edge Cases', () => {
   describe('Special Characters', () => {
     it.skip('should handle prompts with quotes', async () => {
       // Skipping: This test fails in CI when mock is not found at expected path
-      const response = await client.callTool('claude_code', {
+      const response = await client.callTool('run', {
         prompt: 'Create a file with content "Hello \\"World\\""',
         workFolder: testDir,
       });
@@ -85,7 +85,7 @@ describe('Claude Code Edge Cases', () => {
     });
 
     it('should handle prompts with newlines', async () => {
-      const response = await client.callTool('claude_code', {
+      const response = await client.callTool('run', {
         prompt: 'Create a file with content:\\nLine 1\\nLine 2',
         workFolder: testDir,
       });
@@ -94,7 +94,7 @@ describe('Claude Code Edge Cases', () => {
     });
 
     it('should handle prompts with shell special characters', async () => {
-      const response = await client.callTool('claude_code', {
+      const response = await client.callTool('run', {
         prompt: 'Create a file named test$file.txt',
         workFolder: testDir,
       });
@@ -113,7 +113,7 @@ describe('Claude Code Edge Cases', () => {
       await errorClient.connect();
       
       await expect(
-        errorClient.callTool('claude_code', {
+        errorClient.callTool('run', {
           prompt: 'Test prompt',
           workFolder: testDir,
         })
@@ -127,7 +127,7 @@ describe('Claude Code Edge Cases', () => {
       
       // Non-existent directories now throw an error
       await expect(
-        client.callTool('claude_code', {
+        client.callTool('run', {
           prompt: 'Test prompt',
           workFolder: restrictedDir,
         })
@@ -138,7 +138,7 @@ describe('Claude Code Edge Cases', () => {
   describe('Concurrent Requests', () => {
     it('should handle multiple simultaneous requests', async () => {
       const promises = Array(5).fill(null).map((_, i) => 
-        client.callTool('claude_code', {
+        client.callTool('run', {
           prompt: `Create file test${i}.txt`,
           workFolder: testDir,
         })
@@ -155,7 +155,7 @@ describe('Claude Code Edge Cases', () => {
     it('should handle very long prompts', async () => {
       const longPrompt = 'Create a file with content: ' + 'x'.repeat(10000);
       
-      const response = await client.callTool('claude_code', {
+      const response = await client.callTool('run', {
         prompt: longPrompt,
         workFolder: testDir,
       });
@@ -171,7 +171,7 @@ describe('Claude Code Edge Cases', () => {
       // Server resolves paths and checks existence
       // The path /etc/passwd may exist but be a file, not a directory
       await expect(
-        client.callTool('claude_code', {
+        client.callTool('run', {
           prompt: 'Read file',
           workFolder: maliciousPath,
         })
