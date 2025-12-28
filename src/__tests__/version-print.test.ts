@@ -2,30 +2,25 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { MCPTestClient } from './utils/mcp-client.js';
+import { createTestClient, MCPTestClient } from './utils/mcp-client.js';
 import { getSharedMock } from './utils/persistent-mock.js';
 
 describe('Version Print on First Use', () => {
   let client: MCPTestClient;
   let testDir: string;
   let consoleErrorSpy: any;
-  const serverPath = 'dist/server.js';
 
   beforeEach(async () => {
     // Ensure mock exists
     await getSharedMock();
-    
+
     // Create a temporary directory for test files
     testDir = mkdtempSync(join(tmpdir(), 'claude-code-test-'));
-    
+
     // Spy on console.error
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    
-    // Initialize MCP client with custom binary name using absolute path
-    client = new MCPTestClient(serverPath, {
-      CLAUDE_CLI_NAME: '/tmp/claude-code-test-mock/claudeMocked',
-    });
-    
+
+    client = createTestClient({ debug: false });
     await client.connect();
   });
 

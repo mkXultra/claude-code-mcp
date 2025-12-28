@@ -12,7 +12,6 @@ import { spawn, ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve as pathResolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import * as path from 'path';
 import { parseCodexOutput, parseClaudeOutput, parseGeminiOutput } from './parsers.js';
 
@@ -917,9 +916,8 @@ export class ClaudeCodeServer {
   }
 }
 
-// Create and run the server if this is the main module
-const __filename = fileURLToPath(import.meta.url);
-if (process.argv[1] === __filename) {
+// Create and run the server (skip during tests)
+if (!process.env.VITEST) {
   const server = new ClaudeCodeServer();
   server.run().catch(console.error);
 }

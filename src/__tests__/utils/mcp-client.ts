@@ -127,3 +127,33 @@ export class MCPTestClient extends EventEmitter {
     return response.result?.tools || [];
   }
 }
+
+/**
+ * Default server path
+ */
+const DEFAULT_SERVER_PATH = 'dist/server.js';
+
+/**
+ * Create a test client with standard configuration
+ * Automatically unsets VITEST env so the server actually starts
+ */
+export function createTestClient(options: {
+  serverPath?: string;
+  claudeCliName?: string;
+  debug?: boolean;
+  env?: Record<string, string>;
+} = {}): MCPTestClient {
+  const {
+    serverPath = DEFAULT_SERVER_PATH,
+    claudeCliName = '/tmp/claude-code-test-mock/claudeMocked',
+    debug = true,
+    env = {},
+  } = options;
+
+  return new MCPTestClient(serverPath, {
+    VITEST: '',  // Unset so server starts
+    MCP_CLAUDE_DEBUG: debug ? 'true' : '',
+    CLAUDE_CLI_NAME: claudeCliName,
+    ...env,
+  });
+}

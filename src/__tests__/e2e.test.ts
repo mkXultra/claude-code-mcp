@@ -2,13 +2,12 @@ import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { MCPTestClient } from './utils/mcp-client.js';
+import { createTestClient, MCPTestClient } from './utils/mcp-client.js';
 import { getSharedMock, cleanupSharedMock } from './utils/persistent-mock.js';
 
 describe('Claude Code MCP E2E Tests', () => {
   let client: MCPTestClient;
   let testDir: string;
-  const serverPath = 'dist/server.js';
 
   beforeEach(async () => {
     // Ensure mock exists
@@ -17,11 +16,7 @@ describe('Claude Code MCP E2E Tests', () => {
     // Create a temporary directory for test files
     testDir = mkdtempSync(join(tmpdir(), 'claude-code-test-'));
     
-    // Initialize MCP client with debug mode and custom binary name using absolute path
-    client = new MCPTestClient(serverPath, {
-      MCP_CLAUDE_DEBUG: 'true',
-      CLAUDE_CLI_NAME: '/tmp/claude-code-test-mock/claudeMocked',
-    });
+    client = createTestClient();
     
     await client.connect();
   });
@@ -241,9 +236,7 @@ describe('Integration Tests (Local Only)', () => {
     testDir = mkdtempSync(join(tmpdir(), 'claude-code-integration-'));
     
     // Initialize client without mocks for real Claude testing
-    client = new MCPTestClient('dist/server.js', {
-      MCP_CLAUDE_DEBUG: 'true',
-    });
+    client = createTestClient({ claudeCliName: '' });
   });
 
   afterEach(async () => {

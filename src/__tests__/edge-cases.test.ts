@@ -2,27 +2,21 @@ import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { MCPTestClient } from './utils/mcp-client.js';
+import { createTestClient, MCPTestClient } from './utils/mcp-client.js';
 import { getSharedMock, cleanupSharedMock } from './utils/persistent-mock.js';
 
 describe('Claude Code Edge Cases', () => {
   let client: MCPTestClient;
   let testDir: string;
-  const serverPath = 'dist/server.js';
 
   beforeEach(async () => {
     // Ensure mock exists
     await getSharedMock();
-    
+
     // Create test directory
     testDir = mkdtempSync(join(tmpdir(), 'claude-code-edge-'));
-    
-    // Initialize client with custom binary name using absolute path
-    client = new MCPTestClient(serverPath, {
-      MCP_CLAUDE_DEBUG: 'true',
-      CLAUDE_CLI_NAME: '/tmp/claude-code-test-mock/claudeMocked',
-    });
-    
+
+    client = createTestClient();
     await client.connect();
   });
 
@@ -106,10 +100,7 @@ describe('Claude Code Edge Cases', () => {
   describe('Error Recovery', () => {
     it('should handle Claude CLI not found gracefully', async () => {
       // Create a client with a different binary name that doesn't exist
-      const errorClient = new MCPTestClient(serverPath, {
-        MCP_CLAUDE_DEBUG: 'true',
-        CLAUDE_CLI_NAME: 'non-existent-claude',
-      });
+      const errorClient = createTestClient({ claudeCliName: 'non-existent-claude' });
       await errorClient.connect();
       
       await expect(
