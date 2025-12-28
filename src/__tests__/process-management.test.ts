@@ -259,20 +259,20 @@ describe('Process Management Tests', () => {
         expect.arrayContaining(['-p', longJapanesePrompt]),
         expect.any(Object)
       );
-      
-      // Check list_processes truncates long prompts correctly
+
+      // Verify list_processes returns basic info
       const listResult = await callToolHandler!({
         params: {
           name: 'list_processes',
           arguments: {}
         }
       });
-      
+
       const processes = JSON.parse(listResult.content[0].text);
       const process = processes.find((p: any) => p.pid === 12361);
-      expect(process.prompt).toHaveLength(103); // 100 chars + '...'
-      expect(process.prompt.endsWith('...')).toBe(true);
-      expect(process.prompt).toContain('タスク：ファイル管理システムの作成');
+      expect(process.pid).toBe(12361);
+      expect(process.agent).toBe('claude');
+      expect(process.status).toBe('running');
     });
 
     it('should handle prompts with special characters and escape sequences', async () => {
@@ -337,7 +337,7 @@ Unicodeテスト: 🎌 🗾 ✨
             workFolder: '/tmp/test'
           }
         }
-      })).rejects.toThrow('Failed to start Claude CLI process');
+      })).rejects.toThrow('Failed to start claude CLI process');
     });
   });
 
@@ -387,36 +387,33 @@ Unicodeテスト: 🎌 🗾 ✨
       expect(processes).toHaveLength(1);
       expect(processes[0].pid).toBe(12347);
       expect(processes[0].status).toBe('running');
-      expect(processes[0].prompt).toContain('test prompt for listing');
-      expect(processes[0].model).toBe('sonnet');
-      expect(processes[0].session_id).toBe('list-test-session-789');
+      expect(processes[0].agent).toBe('claude');
     });
 
-    it('should truncate long prompts in list', async () => {
+    it('should list process with correct agent type', async () => {
       const { handlers } = await setupServer();
-      
+
       const mockProcess = new EventEmitter() as any;
       mockProcess.pid = 12348;
       mockProcess.stdout = new EventEmitter();
       mockProcess.stderr = new EventEmitter();
       mockProcess.kill = vi.fn();
-      
+
       mockSpawn.mockReturnValue(mockProcess);
-      
+
       const callToolHandler = handlers.get('callTool');
-      
-      // Start a process with a very long prompt
-      const longPrompt = 'a'.repeat(150);
+
+      // Start a process
       await callToolHandler!({
         params: {
           name: 'run',
           arguments: {
-            prompt: longPrompt,
+            prompt: 'test prompt',
             workFolder: '/tmp'
           }
         }
       });
-      
+
       // List processes
       const listResult = await callToolHandler!({
         params: {
@@ -424,10 +421,11 @@ Unicodeテスト: 🎌 🗾 ✨
           arguments: {}
         }
       });
-      
+
       const processes = JSON.parse(listResult.content[0].text);
-      expect(processes[0].prompt).toHaveLength(103); // 100 chars + '...'
-      expect(processes[0].prompt.endsWith('...')).toBe(true);
+      expect(processes[0].pid).toBe(12348);
+      expect(processes[0].agent).toBe('claude');
+      expect(processes[0].status).toBe('running');
     });
   });
 
@@ -478,7 +476,7 @@ Unicodeテスト: 🎌 🗾 ✨
       const processInfo = JSON.parse(result.content[0].text);
       expect(processInfo.pid).toBe(12349);
       expect(processInfo.status).toBe('running');
-      expect(processInfo.claudeOutput).toEqual(claudeJsonOutput);
+      expect(processInfo.agentOutput).toEqual(claudeJsonOutput);
       expect(processInfo.session_id).toBe('test-session-123');
     });
 
@@ -529,7 +527,7 @@ Unicodeテスト: 🎌 🗾 ✨
       const processInfo = JSON.parse(result.content[0].text);
       expect(processInfo.status).toBe('completed');
       expect(processInfo.exitCode).toBe(0);
-      expect(processInfo.claudeOutput).toEqual(completedJsonOutput);
+      expect(processInfo.agentOutput).toEqual(completedJsonOutput);
       expect(processInfo.session_id).toBe('completed-session-456');
     });
 

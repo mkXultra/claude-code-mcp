@@ -28,16 +28,19 @@ vi.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
 vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
   ListToolsRequestSchema: { name: 'listTools' },
   CallToolRequestSchema: { name: 'callTool' },
-  ErrorCode: { 
+  ErrorCode: {
     InternalError: 'InternalError',
     MethodNotFound: 'MethodNotFound',
     InvalidParams: 'InvalidParams'
   },
-  McpError: vi.fn().mockImplementation((code, message) => {
-    const error = new Error(message);
-    (error as any).code = code;
-    return error;
-  })
+  McpError: class McpError extends Error {
+    code: string;
+    constructor(code: string, message: string) {
+      super(message);
+      this.code = code;
+      this.name = 'McpError';
+    }
+  }
 }));
 
 const mockExistsSync = vi.mocked(existsSync);
@@ -193,23 +196,55 @@ describe('Argument Validation Tests', () => {
   });
 
   describe('Runtime Argument Validation', () => {
-    it('should validate workFolder is a string when provided', async () => {
-      mockHomedir.mockReturnValue('/home/user');
-      mockExistsSync.mockReturnValue(true);
-      setupServerMock();
+    let handlers: Map<string, Function>;
+    let mockServerInstance: any;
+
+    async function setupServer() {
+      // Reset modules to ensure fresh import
+      vi.resetModules();
+
+      // Re-setup mocks after reset
+      const { existsSync } = await import('node:fs');
+      const { homedir } = await import('node:os');
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(homedir).mockReturnValue('/home/user');
+
+      const { Server } = await import('@modelcontextprotocol/sdk/server/index.js');
+
+      vi.mocked(Server).mockImplementation(() => {
+        mockServerInstance = {
+          setRequestHandler: vi.fn((schema: any, handler: Function) => {
+            handlers.set(schema.name, handler);
+          }),
+          connect: vi.fn(),
+          close: vi.fn(),
+          onerror: undefined
+        };
+        return mockServerInstance as any;
+      });
+
       const module = await import('../server.js');
       // @ts-ignore
       const { ClaudeCodeServer } = module;
-      
+
       const server = new ClaudeCodeServer();
-      const mockServerInstance = vi.mocked(Server).mock.results[0].value;
-      
-      const callToolCall = mockServerInstance.setRequestHandler.mock.calls.find(
-        (call: any[]) => call[0].name === 'callTool'
-      );
-      
-      const handler = callToolCall[1];
-      
+      return { server, handlers };
+    }
+
+    beforeEach(() => {
+      handlers = new Map();
+      // Re-setup mocks after vi.resetModules() in outer beforeEach
+      mockHomedir.mockReturnValue('/home/user');
+      mockExistsSync.mockReturnValue(true);
+    });
+
+    it('should validate workFolder is a string when provided', async () => {
+      mockHomedir.mockReturnValue('/home/user');
+      mockExistsSync.mockReturnValue(true);
+
+      await setupServer();
+      const handler = handlers.get('callTool')!;
+
       // Test with non-string workFolder
       await expect(
         handler({
@@ -225,22 +260,9 @@ describe('Argument Validation Tests', () => {
     });
 
     it('should reject empty string prompt', async () => {
-      mockHomedir.mockReturnValue('/home/user');
-      mockExistsSync.mockReturnValue(true);
-      setupServerMock();
-      const module = await import('../server.js');
-      // @ts-ignore
-      const { ClaudeCodeServer } = module;
-      
-      const server = new ClaudeCodeServer();
-      const mockServerInstance = vi.mocked(Server).mock.results[0].value;
-      
-      const callToolCall = mockServerInstance.setRequestHandler.mock.calls.find(
-        (call: any[]) => call[0].name === 'callTool'
-      );
-      
-      const handler = callToolCall[1];
-      
+      await setupServer();
+      const handler = handlers.get('callTool')!;
+
       // Empty string prompt should be rejected
       await expect(
         handler({
@@ -252,7 +274,7 @@ describe('Argument Validation Tests', () => {
             }
           }
         })
-      ).rejects.toThrow('Missing or invalid required parameter: prompt');
+      ).rejects.toThrow('Either prompt or prompt_file must be provided');
     });
   });
 });

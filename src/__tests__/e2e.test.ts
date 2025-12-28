@@ -43,11 +43,11 @@ describe('Claude Code MCP E2E Tests', () => {
     it('should register run tool', async () => {
       const tools = await client.listTools();
       
-      expect(tools).toHaveLength(4);
+      expect(tools).toHaveLength(6);
       const claudeCodeTool = tools.find((t: any) => t.name === 'run');
       expect(claudeCodeTool).toEqual({
         name: 'run',
-        description: expect.stringContaining('Claude Code Agent'),
+        description: expect.stringContaining('AI Agent Runner'),
         inputSchema: {
           type: 'object',
           properties: {
@@ -65,7 +65,7 @@ describe('Claude Code MCP E2E Tests', () => {
             },
             model: {
               type: 'string',
-              description: expect.stringContaining('Claude model'),
+              description: expect.stringContaining('sonnet'),
             },
             session_id: {
               type: 'string',
@@ -171,18 +171,14 @@ describe('Claude Code MCP E2E Tests', () => {
       const pidMatch = responseText.match(/"pid":\s*(\d+)/);
       expect(pidMatch).toBeTruthy();
       
-      // Get the PID and check the process
+      // Get the PID and check the process using get_result
       const pid = parseInt(pidMatch![1]);
-      const processes = await client.callTool('list_processes', {});
-      const processesText = processes[0].text;
-      const processData = JSON.parse(processesText);
-      
-      // Find our process
-      const ourProcess = processData.find((p: any) => p.pid === pid);
-      expect(ourProcess).toBeTruthy();
-      
+      const result = await client.callTool('get_result', { pid });
+      const resultText = result[0].text;
+      const processData = JSON.parse(resultText);
+
       // Verify that the model was set correctly
-      expect(ourProcess.model).toBe('haiku');
+      expect(processData.model).toBe('haiku');
     });
 
     it('should pass non-alias model names unchanged', async () => {
@@ -201,18 +197,14 @@ describe('Claude Code MCP E2E Tests', () => {
       const responseText = response[0].text;
       const pidMatch = responseText.match(/"pid":\s*(\d+)/);
       const pid = parseInt(pidMatch![1]);
-      
-      // Check the process
-      const processes = await client.callTool('list_processes', {});
-      const processesText = processes[0].text;
-      const processData = JSON.parse(processesText);
-      
-      // Find our process
-      const ourProcess = processData.find((p: any) => p.pid === pid);
-      expect(ourProcess).toBeTruthy();
-      
+
+      // Check the process using get_result
+      const result = await client.callTool('get_result', { pid });
+      const resultText = result[0].text;
+      const processData = JSON.parse(resultText);
+
       // The model should be unchanged
-      expect(ourProcess.model).toBe('sonnet');
+      expect(processData.model).toBe('sonnet');
     });
     
     it('should work without specifying a model', async () => {

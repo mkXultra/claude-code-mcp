@@ -147,24 +147,15 @@ describe('Error Handling Tests', () => {
       });
       
       // Call handler
-      try {
-        await callToolHandler({
-          params: {
-            name: 'run',
-            arguments: {
-              prompt: 'test',
-              workFolder: '/tmp'
-            }
+      await expect(callToolHandler({
+        params: {
+          name: 'run',
+          arguments: {
+            prompt: 'test',
+            workFolder: '/tmp'
           }
-        });
-        expect.fail('Should have thrown');
-      } catch (err: any) {
-        // Check if McpError was called with the process start failure message
-        expect(McpError).toHaveBeenCalledWith(
-          'InternalError',
-          'Failed to start claude CLI process'
-        );
-      }
+        }
+      })).rejects.toThrow('Failed to start claude CLI process');
     });
 
     it('should handle invalid argument types', async () => {
