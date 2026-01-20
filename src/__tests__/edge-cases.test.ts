@@ -137,8 +137,12 @@ describe('Claude Code Edge Cases', () => {
 
       const results = await Promise.allSettled(promises);
       const successful = results.filter(r => r.status === 'fulfilled');
-      
-      expect(successful.length).toBeGreaterThan(0);
+
+      const failures = results
+        .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+        .map((r) => r.reason?.message ?? String(r.reason));
+
+      expect(successful.length, `Concurrent run failures: ${failures.join(' | ')}`).toBeGreaterThan(0);
     });
   });
 

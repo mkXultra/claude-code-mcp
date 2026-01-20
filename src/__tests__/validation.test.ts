@@ -101,6 +101,7 @@ describe('Argument Validation Tests', () => {
         prompt: z.string(),
         workFolder: z.string(),
         model: z.string().optional(),
+        reasoning_effort: z.string().optional(),
         session_id: z.string().optional()
       });
       
@@ -134,6 +135,7 @@ describe('Argument Validation Tests', () => {
         prompt: z.string(),
         workFolder: z.string(),
         model: z.string().optional(),
+        reasoning_effort: z.string().optional(),
         session_id: z.string().optional()
       });
       
@@ -149,6 +151,7 @@ describe('Argument Validation Tests', () => {
         prompt: z.string(),
         workFolder: z.string(),
         model: z.string().optional(),
+        reasoning_effort: z.string().optional(),
         session_id: z.string().optional()
       });
       
@@ -167,6 +170,7 @@ describe('Argument Validation Tests', () => {
         prompt: z.string(),
         workFolder: z.string(),
         model: z.string().optional(),
+        reasoning_effort: z.string().optional(),
         session_id: z.string().optional()
       });
       
@@ -180,6 +184,7 @@ describe('Argument Validation Tests', () => {
         prompt: z.string(),
         workFolder: z.string(),
         model: z.string().optional(),
+        reasoning_effort: z.string().optional(),
         session_id: z.string().optional()
       });
       
@@ -275,6 +280,44 @@ describe('Argument Validation Tests', () => {
           }
         })
       ).rejects.toThrow('Either prompt or prompt_file must be provided');
+    });
+
+    it('should reject invalid reasoning_effort values', async () => {
+      await setupServer();
+      const handler = handlers.get('callTool')!;
+
+      await expect(
+        handler({
+          params: {
+            name: 'run',
+            arguments: {
+              prompt: 'test',
+              workFolder: '/tmp',
+              model: 'gpt-5.2-codex',
+              reasoning_effort: 'fast'
+            }
+          }
+        })
+      ).rejects.toThrow(/reasoning_effort/i);
+    });
+
+    it('should reject reasoning_effort for non-codex models', async () => {
+      await setupServer();
+      const handler = handlers.get('callTool')!;
+
+      await expect(
+        handler({
+          params: {
+            name: 'run',
+            arguments: {
+              prompt: 'test',
+              workFolder: '/tmp',
+              model: 'sonnet',
+              reasoning_effort: 'low'
+            }
+          }
+        })
+      ).rejects.toThrow(/reasoning_effort/i);
     });
   });
 });

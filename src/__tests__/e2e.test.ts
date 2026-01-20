@@ -62,6 +62,10 @@ describe('Claude Code MCP E2E Tests', () => {
               type: 'string',
               description: expect.stringContaining('sonnet'),
             },
+            reasoning_effort: {
+              type: 'string',
+              description: expect.stringContaining('model_reasoning_effort'),
+            },
             session_id: {
               type: 'string',
               description: expect.stringContaining('session ID'),

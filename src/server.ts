@@ -23,6 +23,32 @@ const MODEL_ALIASES: Record<string, string> = {
   'haiku': 'claude-3-5-haiku-20241022'
 };
 
+const ALLOWED_REASONING_EFFORTS = new Set(['low', 'medium', 'high']);
+
+function getReasoningEffort(model: string, rawValue: unknown): string {
+  if (typeof rawValue !== 'string') {
+    return '';
+  }
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return '';
+  }
+  const normalized = trimmed.toLowerCase();
+  if (!ALLOWED_REASONING_EFFORTS.has(normalized)) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `Invalid reasoning_effort: ${rawValue}. Allowed values: low, medium, high.`
+    );
+  }
+  if (!model.startsWith('gpt-')) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'reasoning_effort is only supported for Codex models (gpt-*).'
+    );
+  }
+  return normalized;
+}
+
 // Define debugMode globally using const
 const debugMode = process.env.MCP_CLAUDE_DEBUG === 'true';
 
@@ -216,7 +242,8 @@ interface CodexArgs {
   prompt?: string;
   prompt_file?: string;
   workFolder: string;
-  model?: string;  // Format: gpt5-low, gpt5-middle, gpt5-high
+  model?: string;  // Codex model id (e.g., gpt-5.2-codex)
+  reasoning_effort?: string;
 }
 
 /**
@@ -339,7 +366,7 @@ export class ClaudeCodeServer {
 **IMPORTANT**: This tool now returns immediately with a PID. Use other tools to check status and get results.
 
 **Supported models**:
-"sonnet", "opus", "haiku", "gpt-5-low", "gpt-5-medium", "gpt-5-high", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-3-pro-preview"
+"sonnet", "opus", "haiku", "gpt-5.2-codex", "gpt-5.1-codex-mini", "gpt-5.1-codex-max", "gpt-5.2", "gpt-5.1", "gpt-5.1-codex", "gpt-5-codex", "gpt-5-codex-mini", "gpt-5", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-3-pro-preview"
 
 **Prompt input**: You must provide EITHER prompt (string) OR prompt_file (file path), but not both.
 
@@ -367,7 +394,11 @@ export class ClaudeCodeServer {
               },
               model: {
                 type: 'string',
-                description: 'The model to use: "sonnet", "opus", "haiku", "gpt-5-low", "gpt-5-medium", "gpt-5-high", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-3-pro-preview".',
+                description: 'The model to use: "sonnet", "opus", "haiku", "gpt-5.2-codex", "gpt-5.1-codex-mini", "gpt-5.1-codex-max", "gpt-5.2", "gpt-5.1", "gpt-5.1-codex", "gpt-5-codex", "gpt-5-codex-mini", "gpt-5", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-3-pro-preview".',
+              },
+              reasoning_effort: {
+                type: 'string',
+                description: 'Codex only. Sets model_reasoning_effort. Allowed: "low", "medium", "high".',
               },
               session_id: {
                 type: 'string',
@@ -528,6 +559,7 @@ export class ClaudeCodeServer {
 
     // Determine which agent to use based on model name
     const model = toolArguments.model || '';
+    const reasoningEffort = getReasoningEffort(model, toolArguments.reasoning_effort);
     let agent: 'codex' | 'claude' | 'gemini';
 
     if (model.startsWith('gpt-')) {
@@ -544,16 +576,20 @@ export class ClaudeCodeServer {
     if (agent === 'codex') {
       // Handle Codex
       cliPath = this.codexCliPath;
-      processArgs = ['exec'];
 
-      // Parse model format for Codex (e.g., gpt-5-low -> model: gpt-5, effort: low)
+      // Use 'exec resume' if session_id is provided, otherwise use 'exec'
+      if (toolArguments.session_id && typeof toolArguments.session_id === 'string') {
+        processArgs = ['exec', 'resume', toolArguments.session_id];
+      } else {
+        processArgs = ['exec'];
+      }
+
+      // Handle Codex models.
+      if (reasoningEffort) {
+        processArgs.push('-c', `model_reasoning_effort=${reasoningEffort}`);
+      }
       if (toolArguments.model) {
-        // Split by "gpt-5-" to get the effort level
-        const effort = toolArguments.model.replace('gpt-5-', '');
-        if (effort && effort !== toolArguments.model) {
-          processArgs.push('-c', `model_reasoning_effort=${effort}`);
-        }
-        processArgs.push('--model', 'gpt-5');
+        processArgs.push('--model', toolArguments.model);
       }
 
       processArgs.push('--full-auto', '--json', prompt);
@@ -728,8 +764,8 @@ export class ClaudeCodeServer {
     // If we have valid output from agent, include it
     if (agentOutput) {
       response.agentOutput = agentOutput;
-      // Extract session_id if available (Claude and Gemini)
-      if ((process.toolType === 'claude' || process.toolType === 'gemini') && agentOutput.session_id) {
+      // Extract session_id if available
+      if (agentOutput.session_id) {
         response.session_id = agentOutput.session_id;
       }
     } else {

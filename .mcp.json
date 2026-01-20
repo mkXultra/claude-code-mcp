@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "acm-dev": {
+      "command": "npm",
+      "args": [
+        "start"
+      ]
+    }
+  }
+}

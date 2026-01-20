@@ -1,26 +1,63 @@
-# Release Checklist
+# Release Process
 
-## Pre-Release Checks
+This project uses [semantic-release](https://semantic-release.gitbook.io/) for automated versioning and publishing.
 
-- [ ] Tests are green on GitHub CI
-- [ ] Run linter locally (`npm run lint`)
-- [ ] Run type checker locally (`npm run typecheck`)
-- [ ] Run tests locally (`npm test`)
-- [ ] Run build locally (`npm run build`)
-- [ ] Changelog version has been increased
-- [ ] Changelog entries for the new version are written
-- [ ] Version in `server.ts` (hardcoded) is updated
-- [ ] Version in `package.json` is updated
+## How It Works
 
-## Local Verification
+1. **Commit with Conventional Commits format** to `develop` branch
+2. **CI automatically determines version** based on commit messages
+3. **Automatic release**: version bump, CHANGELOG update, npm publish, GitHub Release
 
-- [ ] Install npm package locally (`npm pack && npm install -g <package-name>-<version>.tgz`)
-- [ ] Test the locally installed package using the npm inspector (automated tests)
+## Commit Message Format
 
-## Release Steps
+Use [Conventional Commits](https://www.conventionalcommits.org/) format:
 
-- [ ] Push all changes to the main branch
-- [ ] Create a git tag for the version (e.g., `git tag v1.2.3`)
-- [ ] Push the git tag (e.g., `git push origin v1.2.3`)
-- [ ] Publish to npm (`npm publish`)
-- [ ] Create a GitHub Release based on the tag, including changelog notes 
+| Type | Description | Version Bump |
+|------|-------------|--------------|
+| `fix:` | Bug fixes | Patch (1.0.0 → 1.0.1) |
+| `feat:` | New features | Minor (1.0.0 → 1.1.0) |
+| `feat!:` or `BREAKING CHANGE:` | Breaking changes | Major (1.0.0 → 2.0.0) |
+| `docs:`, `chore:`, `style:`, `refactor:`, `test:` | Other changes | No release |
+
+### Examples
+
+```bash
+# Patch release
+git commit -m "fix: resolve session_id not working for Codex"
+
+# Minor release
+git commit -m "feat: add support for new model"
+
+# Major release
+git commit -m "feat!: change API response format"
+# or
+git commit -m "feat: change API response format
+
+BREAKING CHANGE: response structure has changed"
+```
+
+## Pre-Merge Checklist
+
+Before merging to `main`:
+
+- [ ] Tests pass locally (`npm test`)
+- [ ] Build succeeds (`npm run build`)
+- [ ] Commit messages follow Conventional Commits format
+- [ ] PR has been reviewed (if applicable)
+
+## Manual Release (Emergency Only)
+
+If automated release fails, you can run locally:
+
+```bash
+# Requires GITHUB_TOKEN with appropriate permissions
+GITHUB_TOKEN=xxx npx semantic-release
+```
+
+## npm Trusted Publishing Setup
+
+This project uses OIDC trusted publishing. Configuration on npmjs.com:
+
+- Organization/user: `mkXultra`
+- Repository: `claude-code-mcp`
+- Workflow filename: `publish.yml`
