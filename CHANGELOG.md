@@ -1,3 +1,10 @@
+## [2.3.3](https://github.com/mkXultra/claude-code-mcp/compare/v2.3.2...v2.3.3) (2026-01-20)
+
+
+### Bug Fixes
+
+* trigger release with correct version ([a0af8cf](https://github.com/mkXultra/claude-code-mcp/commit/a0af8cf25c8d3a1fd3ca7ef26d22f85981cc6f2f))
+
 # 1.0.0 (2026-01-20)
 
 
