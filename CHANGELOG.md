@@ -5,6 +5,42 @@
 
 * Apply npm pkg fix for bin path ([e47140d](https://github.com/mkXultra/claude-code-mcp/commit/e47140d6beebacc60ca1cf55903608f9f207ff94))
 * Remove commented-out debug logs from server.ts ([1ef44bb](https://github.com/mkXultra/claude-code-mcp/commit/1ef44bb280fea68dc874fb0d978fea682ddbb681))
+* retry release after tag cleanup ([825838b](https://github.com/mkXultra/claude-code-mcp/commit/825838b05b7e6a10ae01d7bc7bb9179a8d6095bc))
+* rm not use param ([ad9670c](https://github.com/mkXultra/claude-code-mcp/commit/ad9670cfe04507e40abab2427702b680b00353db))
+* trigger release for semantic-release setup ([5e117ee](https://github.com/mkXultra/claude-code-mcp/commit/5e117ee31583ccef2e49c820c815c19716abe392))
+* update tests to match current implementation ([2aa7758](https://github.com/mkXultra/claude-code-mcp/commit/2aa775813678d0a9da7150411fd9a1429ff7736f))
+* use VITEST env check for test detection and add createTestClient helper ([84fa153](https://github.com/mkXultra/claude-code-mcp/commit/84fa1535aa2c50acf9d5a9650bf881df7ff8d470))
+
+
+### Features
+
+* Add CHANGELOG and finalize server ([c50a6bb](https://github.com/mkXultra/claude-code-mcp/commit/c50a6bbb5d7dd8d849b1877e19e97a5aedd63493))
+* add CWD to code prompt and bump version to 1.1.0 ([b62c9c2](https://github.com/mkXultra/claude-code-mcp/commit/b62c9c2c802f84d0d4eb80e970d08ef25a1a9c40))
+* add Gemini CLI support to MCP server ([a9942bc](https://github.com/mkXultra/claude-code-mcp/commit/a9942bc3b0410f5cb45e99108d1b13c252cc5655))
+* Add GitHub Actions CI workflow for build checks ([#2](https://github.com/mkXultra/claude-code-mcp/issues/2)) ([613c0cb](https://github.com/mkXultra/claude-code-mcp/commit/613c0cb855b408d83c661a2317db328548dc72e8))
+* add process cleanup tool and simplify list output ([cc03323](https://github.com/mkXultra/claude-code-mcp/commit/cc03323df9a24be3c4dcbb6fa1f41d2056b942e4))
+* add semantic-release with npm trusted publishing ([ffdf7c8](https://github.com/mkXultra/claude-code-mcp/commit/ffdf7c876060c96cfaf58a74573bda462552fd83))
+* add wait tool ,support gemini 3.9 and continue conversation gemini ([5d249ca](https://github.com/mkXultra/claude-code-mcp/commit/5d249ca7c36a6ea2eea26fd15b4796b2721d19f3))
+* Codex セッション再開機能とMCP設定ファイルの追加 ([d02b329](https://github.com/mkXultra/claude-code-mcp/commit/d02b329a69df0fcfef65e16609cbb78dc582f1ff))
+* Finalize server with dynamic path finding and JSON output ([6c3c410](https://github.com/mkXultra/claude-code-mcp/commit/6c3c4106f4c5f6fdc5cc8e25bb3b0ea142d7e015))
+* Integrate CWD parsing from prompt, fix lint errors ([5113edb](https://github.com/mkXultra/claude-code-mcp/commit/5113edba01a905637075a34fe771d0df66aef6e1))
+* Organize screenshots, enhance CI, and clean up Git tracking ([7bbc42d](https://github.com/mkXultra/claude-code-mcp/commit/7bbc42d8df204ff6cb1a704ab812d97ff55a2bda))
+* Refine server, JSON parsing, docs, and metadata ([4ab9a7f](https://github.com/mkXultra/claude-code-mcp/commit/4ab9a7f8ee0d84d730e3f0faba6fed302be23736))
+* Resolve npm link, ESM import, and MCP config issues ([7b0cc83](https://github.com/mkXultra/claude-code-mcp/commit/7b0cc8395eddf25f53835a79d156efee6363bc2a))
+* **server:** Prepend system instruction to Claude prompts for broader file access context ([08b9f2d](https://github.com/mkXultra/claude-code-mcp/commit/08b9f2d0cfb0294758cb05cdfc63ec9e5a414b53))
+* **server:** Release v1.6.0 - Updates timeout, changelog, error handling, and description ([4382617](https://github.com/mkXultra/claude-code-mcp/commit/4382617bf90924e7df66c807240f928fa3b45507))
+* **server:** Release v1.6.0 - Updates timeout, changelog, error handling, and description ([855be94](https://github.com/mkXultra/claude-code-mcp/commit/855be9478cdd2772ff03ea26b2541561422e8599))
+* support codex for gpt5 ([e3111d8](https://github.com/mkXultra/claude-code-mcp/commit/e3111d822c33fd58e6c18adbf8ecd4e31919cf9f))
+* Unify tools into agentic 'code' tool (v1.4.0) ([87c6704](https://github.com/mkXultra/claude-code-mcp/commit/87c6704ea0bed49140e271d56a50cf268dc510e2))
+* update 'code' tool description in server.ts for clarity and power ([dfd2327](https://github.com/mkXultra/claude-code-mcp/commit/dfd2327abff2123fc9b3cccb8d5f6e2cdfc01d1d))
+
+# 1.0.0 (2026-01-20)
+
+
+### Bug Fixes
+
+* Apply npm pkg fix for bin path ([e47140d](https://github.com/mkXultra/claude-code-mcp/commit/e47140d6beebacc60ca1cf55903608f9f207ff94))
+* Remove commented-out debug logs from server.ts ([1ef44bb](https://github.com/mkXultra/claude-code-mcp/commit/1ef44bb280fea68dc874fb0d978fea682ddbb681))
 * rm not use param ([ad9670c](https://github.com/mkXultra/claude-code-mcp/commit/ad9670cfe04507e40abab2427702b680b00353db))
 * trigger release for semantic-release setup ([5e117ee](https://github.com/mkXultra/claude-code-mcp/commit/5e117ee31583ccef2e49c820c815c19716abe392))
 * update tests to match current implementation ([2aa7758](https://github.com/mkXultra/claude-code-mcp/commit/2aa775813678d0a9da7150411fd9a1429ff7736f))
