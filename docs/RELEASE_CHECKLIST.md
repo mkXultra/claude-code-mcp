@@ -38,26 +38,28 @@ BREAKING CHANGE: response structure has changed"
 
 ## Pre-Merge Checklist
 
-Before merging to `main`:
+Before merging to `develop`:
 
 - [ ] Tests pass locally (`npm test`)
 - [ ] Build succeeds (`npm run build`)
 - [ ] Commit messages follow Conventional Commits format
 - [ ] PR has been reviewed (if applicable)
 
-## Manual Release (Emergency Only)
+## Important: Git Tags
 
-If automated release fails, you can run locally:
+semantic-release uses git tags to determine the current version. **Tags must exist on the `develop` branch.**
 
-```bash
-# Requires GITHUB_TOKEN with appropriate permissions
-GITHUB_TOKEN=xxx npx semantic-release
-```
+If releases fail with version errors:
+
+1. Check existing tags: `git tag -l 'v*'`
+2. Ensure the latest version tag exists on `develop`
+3. If missing, create it: `git tag vX.X.X && git push origin vX.X.X`
 
 ## npm Trusted Publishing Setup
 
-This project uses OIDC trusted publishing. Configuration on npmjs.com:
+This project uses OIDC trusted publishing (no npm token required).
 
+Configuration on npmjs.com:
 - Organization/user: `mkXultra`
 - Repository: `claude-code-mcp`
 - Workflow filename: `publish.yml`
