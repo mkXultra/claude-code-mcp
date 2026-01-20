@@ -576,7 +576,13 @@ export class ClaudeCodeServer {
     if (agent === 'codex') {
       // Handle Codex
       cliPath = this.codexCliPath;
-      processArgs = ['exec'];
+
+      // Use 'exec resume' if session_id is provided, otherwise use 'exec'
+      if (toolArguments.session_id && typeof toolArguments.session_id === 'string') {
+        processArgs = ['exec', 'resume', toolArguments.session_id];
+      } else {
+        processArgs = ['exec'];
+      }
 
       // Handle Codex models.
       if (reasoningEffort) {
@@ -758,8 +764,8 @@ export class ClaudeCodeServer {
     // If we have valid output from agent, include it
     if (agentOutput) {
       response.agentOutput = agentOutput;
-      // Extract session_id if available (Claude and Gemini)
-      if ((process.toolType === 'claude' || process.toolType === 'gemini') && agentOutput.session_id) {
+      // Extract session_id if available
+      if (agentOutput.session_id) {
         response.session_id = agentOutput.session_id;
       }
     } else {

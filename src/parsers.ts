@@ -10,13 +10,20 @@ export function parseCodexOutput(stdout: string): any {
     const lines = stdout.trim().split('\n');
     let lastMessage = null;
     let tokenCount = null;
+    let threadId = null;
     
     for (const line of lines) {
       if (line.trim()) {
         try {
           const parsed = JSON.parse(line);
-          if (parsed.msg?.type === 'agent_message') {
+          if (parsed.type === 'thread.started' && parsed.thread_id) {
+            threadId = parsed.thread_id;
+          } else if (parsed.item?.type === 'agent_message') {
+            lastMessage = parsed.item.text;
+          } else if (parsed.msg?.type === 'agent_message') {
             lastMessage = parsed.msg.message;
+          } else if (parsed.item?.type === 'reasoning') {
+            // Ignore reasoning-only items for message selection.
           } else if (parsed.msg?.type === 'token_count') {
             tokenCount = parsed.msg;
           }
@@ -27,10 +34,11 @@ export function parseCodexOutput(stdout: string): any {
       }
     }
     
-    if (lastMessage || tokenCount) {
+    if (lastMessage || tokenCount || threadId) {
       return {
         message: lastMessage,
-        token_count: tokenCount
+        token_count: tokenCount,
+        session_id: threadId
       };
     }
   } catch (e) {
