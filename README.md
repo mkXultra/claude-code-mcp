@@ -18,7 +18,7 @@ This MCP server provides tools that can be used by LLMs to interact with AI CLI 
 - Run Claude CLI with all permissions bypassed (using `--dangerously-skip-permissions`)
 - Execute Codex CLI with automatic approval mode (using `--full-auto`)
 - Execute Gemini CLI with automatic approval mode (using `-y`)
-- Support multiple AI models: Claude (sonnet, opus, haiku), Codex (gpt-5-low, gpt-5-medium, gpt-5-high), and Gemini (gemini-2.5-pro, gemini-2.5-flash)
+- Support multiple AI models: Claude (sonnet, opus, haiku), Codex (gpt-5.2-codex, gpt-5.1-codex-mini, gpt-5.1-codex-max, gpt-5.2, gpt-5.1, gpt-5.1-codex, gpt-5-codex, gpt-5-codex-mini, gpt-5), and Gemini (gemini-2.5-pro, gemini-2.5-flash, gemini-3-pro-preview)
 - Manage background processes with PID tracking
 - Parse and return structured outputs from both tools
 
@@ -153,7 +153,7 @@ This server exposes the following tools:
 
 ### `run`
 
-Executes a prompt using either Claude CLI or Codex CLI. The appropriate CLI is automatically selected based on the model name.
+Executes a prompt using Claude CLI, Codex CLI, or Gemini CLI. The appropriate CLI is automatically selected based on the model name.
 
 **Arguments:**
 - `prompt` (string, optional): The prompt to send to the AI agent. Either `prompt` or `prompt_file` is required.
@@ -161,9 +161,10 @@ Executes a prompt using either Claude CLI or Codex CLI. The appropriate CLI is a
 - `workFolder` (string, required): The working directory for the CLI execution. Must be an absolute path.
 - `model` (string, optional): The model to use:
   - Claude models: "sonnet", "opus", "haiku"
-  - Codex models: "gpt-5-low", "gpt-5-medium", "gpt-5-high"
-  - Gemini models: "gemini-2.5-pro", "gemini-2.5-flash"
-- `session_id` (string, optional): Optional session ID to resume a previous session. Supported for: haiku, sonnet, opus.
+  - Codex models: "gpt-5.2-codex", "gpt-5.1-codex-mini", "gpt-5.1-codex-max", "gpt-5.2", "gpt-5.1", "gpt-5.1-codex", "gpt-5-codex", "gpt-5-codex-mini", "gpt-5"
+  - Gemini models: "gemini-2.5-pro", "gemini-2.5-flash", "gemini-3-pro-preview"
+- `reasoning_effort` (string, optional): Codex only. Sets `model_reasoning_effort` (allowed: "low", "medium", "high").
+- `session_id` (string, optional): Optional session ID to resume a previous session. Supported for: haiku, sonnet, opus, gemini-2.5-pro, gemini-2.5-flash, gemini-3-pro-preview.
 
 ### `list_processes`
 
@@ -202,7 +203,8 @@ Terminates a running AI agent process by PID.
   "arguments": {
     "prompt": "Create a REST API with Express.js",
     "workFolder": "/Users/username/my_project",
-    "model": "gpt-5-high"
+    "model": "gpt-5.2-codex",
+    "reasoning_effort": "high"
   }
 }
 ```
@@ -345,8 +347,8 @@ This will open a web interface where you can:
 2. Test each tool with different parameters
 3. Test different AI models including:
    - Claude models: `sonnet`, `opus`, `haiku`
-   - Codex models: `gpt-5-low`, `gpt-5-medium`, `gpt-5-high`
-   - Gemini models: `gemini-2.5-pro`, `gemini-2.5-flash`
+   - Codex models: `gpt-5.2-codex`, `gpt-5.1-codex-mini`, `gpt-5.1-codex-max`, `gpt-5.2`, `gpt-5.1`, `gpt-5.1-codex`, `gpt-5-codex`, `gpt-5-codex-mini`, `gpt-5`
+   - Gemini models: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3-pro-preview`
 
 Example test: Select the `run` tool and provide:
 - `prompt`: "What is 2+2?"
