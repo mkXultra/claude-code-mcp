@@ -1,3 +1,11 @@
+# [2.4.0](https://github.com/mkXultra/claude-code-mcp/compare/v2.3.3...v2.4.0) (2026-01-24)
+
+
+### Features
+
+* add model aliases and auto-reasoning for Codex ([16bbd7c](https://github.com/mkXultra/claude-code-mcp/commit/16bbd7cef934cbe2c652e7e48c8dd289f1a64eda))
+* add support for gemini-3-flash-preview ([b51a2d1](https://github.com/mkXultra/claude-code-mcp/commit/b51a2d1789455f3366dfc8f6397cf7ffc39f930d))
+
 ## [2.3.3](https://github.com/mkXultra/claude-code-mcp/compare/v2.3.2...v2.3.3) (2026-01-20)
 
 
