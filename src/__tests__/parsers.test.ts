@@ -1,0 +1,108 @@
+import { describe, it, expect } from 'vitest';
+import { parseCodexOutput, parseClaudeOutput } from '../parsers.js';
+
+describe('parseCodexOutput', () => {
+  it('should parse basic Codex output with message and session_id', () => {
+    const output = `
+{"type":"thread.started","thread_id":"test-session-id"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"type":"agent_message","text":"Hello world"}}
+{"type":"turn.completed"}
+`;
+    const result = parseCodexOutput(output);
+    expect(result).toEqual({
+      message: "Hello world",
+      session_id: "test-session-id",
+      token_count: null,
+      tools: undefined
+    });
+  });
+
+  it('should extract MCP tool calls', () => {
+    const output = `
+{"type":"thread.started","thread_id":"tool-test-id"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_1","type":"mcp_tool_call","server":"acm","tool":"run","arguments":{"model":"gemini-2.5-flash","prompt":"hi"},"result":{"content":[{"text":"started","type":"text"}]},"status":"completed"}}
+{"type":"item.completed","item":{"type":"agent_message","text":"Tool executed"}}
+{"type":"turn.completed"}
+`;
+    const result = parseCodexOutput(output);
+    
+    expect(result.message).toBe("Tool executed");
+    expect(result.session_id).toBe("tool-test-id");
+    expect(result.tools).toHaveLength(1);
+    expect(result.tools[0]).toEqual({
+      tool: "run",
+      server: "acm",
+      input: { model: "gemini-2.5-flash", prompt: "hi" },
+      output: { content: [{ text: "started", type: "text" }] }
+    });
+  });
+
+  it('should handle multiple tool calls', () => {
+    const output = `
+{"type":"item.completed","item":{"type":"mcp_tool_call","tool":"tool1","arguments":{"arg":1},"result":"res1"}}
+{"type":"item.completed","item":{"type":"mcp_tool_call","tool":"tool2","arguments":{"arg":2},"result":"res2"}}
+`;
+    const result = parseCodexOutput(output);
+    expect(result.tools).toHaveLength(2);
+    expect(result.tools[0].tool).toBe("tool1");
+    expect(result.tools[1].tool).toBe("tool2");
+  });
+
+  it('should return null for empty input', () => {
+    expect(parseCodexOutput("")).toBeNull();
+  });
+
+  it('should handle invalid JSON gracefully', () => {
+    const output = `
+{"type":"valid"}
+INVALID_JSON
+{"type":"item.completed","item":{"type":"agent_message","text":"Still parses valid lines"}}
+`;
+    const result = parseCodexOutput(output);
+    expect(result.message).toBe("Still parses valid lines");
+  });
+});
+
+describe('parseClaudeOutput', () => {
+  it('should parse legacy JSON output', () => {
+    const output = JSON.stringify({
+      content: [{ type: 'text', text: 'Hello' }]
+    });
+    const result = parseClaudeOutput(output);
+    expect(result).toEqual({
+      content: [{ type: 'text', text: 'Hello' }]
+    });
+  });
+
+  it('should parse stream-json (NDJSON) output', () => {
+    const output = `
+{"type":"system","session_id":"test-claude-session"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Thinking..."}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"call_1","name":"mcp__acm__run","input":{"prompt":"hi"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"call_1","content":"done"}]}}
+{"type":"result","result":"Final Answer","is_error":false}
+`;
+    const result = parseClaudeOutput(output);
+    
+    expect(result.message).toBe("Final Answer");
+    expect(result.session_id).toBe("test-claude-session");
+    expect(result.tools).toHaveLength(1);
+    expect(result.tools[0]).toEqual({
+      tool: "mcp__acm__run",
+      input: { prompt: "hi" },
+      output: "done"
+    });
+  });
+
+  it('should handle invalid NDJSON lines gracefully', () => {
+    const output = `
+{"type":"system"}
+INVALID_LINE
+{"type":"result","result":"Success"}
+`;
+    const result = parseClaudeOutput(output);
+    expect(result.message).toBe("Success");
+  });
+});

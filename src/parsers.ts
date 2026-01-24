@@ -11,6 +11,7 @@ export function parseCodexOutput(stdout: string): any {
     let lastMessage = null;
     let tokenCount = null;
     let threadId = null;
+    const tools: any[] = [];
     
     for (const line of lines) {
       if (line.trim()) {
@@ -26,6 +27,13 @@ export function parseCodexOutput(stdout: string): any {
             // Ignore reasoning-only items for message selection.
           } else if (parsed.msg?.type === 'token_count') {
             tokenCount = parsed.msg;
+          } else if (parsed.type === 'item.completed' && parsed.item?.type === 'mcp_tool_call') {
+            tools.push({
+              server: parsed.item.server,
+              tool: parsed.item.tool,
+              input: parsed.item.arguments, // Map arguments to input to match common patterns
+              output: parsed.item.result
+            });
           }
         } catch (e) {
           // Skip invalid JSON lines
@@ -34,11 +42,12 @@ export function parseCodexOutput(stdout: string): any {
       }
     }
     
-    if (lastMessage || tokenCount || threadId) {
+    if (lastMessage || tokenCount || threadId || tools.length > 0) {
       return {
         message: lastMessage,
         token_count: tokenCount,
-        session_id: threadId
+        session_id: threadId,
+        tools: tools.length > 0 ? tools : undefined
       };
     }
   } catch (e) {
@@ -49,17 +58,93 @@ export function parseCodexOutput(stdout: string): any {
 }
 
 /**
- * Parse Claude JSON output
+ * Parse Claude Output (supports both JSON and stream-json/NDJSON)
  */
 export function parseClaudeOutput(stdout: string): any {
   if (!stdout) return null;
 
+  // First try parsing as a single JSON object (backward compatibility)
   try {
     return JSON.parse(stdout);
   } catch (e) {
-    debugLog(`[Debug] Failed to parse Claude JSON output: ${e}`);
+    // If not valid single JSON, proceed to parse as NDJSON
+  }
+
+  try {
+    const lines = stdout.trim().split('\n');
+    let lastMessage = null;
+    let sessionId = null;
+    const toolsMap = new Map<string, any>(); // Map by tool_use id for matching results
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+
+      try {
+        const parsed = JSON.parse(line);
+
+        // Extract session ID from any message that has it
+        if (parsed.session_id) {
+          sessionId = parsed.session_id;
+        }
+
+        // Extract final result message
+        if (parsed.type === 'result' && parsed.result) {
+          lastMessage = parsed.result;
+        }
+
+        // Extract tool usage from assistant messages
+        if (parsed.type === 'assistant' && parsed.message?.content) {
+          for (const content of parsed.message.content) {
+            if (content.type === 'tool_use') {
+              toolsMap.set(content.id, {
+                tool: content.name,
+                input: content.input,
+                output: null // Will be filled when tool_result is found
+              });
+            }
+          }
+        }
+
+        // Match tool results from user messages
+        if (parsed.type === 'user' && parsed.message?.content) {
+          for (const content of parsed.message.content) {
+            if (content.type === 'tool_result' && content.tool_use_id) {
+              const tool = toolsMap.get(content.tool_use_id);
+              if (tool) {
+                // Extract text from content array
+                if (Array.isArray(content.content)) {
+                  const textContent = content.content.find((c: any) => c.type === 'text');
+                  tool.output = textContent?.text || null;
+                } else {
+                  tool.output = content.content;
+                }
+              }
+            }
+          }
+        }
+
+      } catch (e) {
+        debugLog(`[Debug] Skipping invalid JSON line in Claude output: ${line}`);
+      }
+    }
+
+    // Convert Map to array
+    const tools = Array.from(toolsMap.values());
+
+    if (lastMessage || sessionId || tools.length > 0) {
+      return {
+        message: lastMessage, // This is the final result text
+        session_id: sessionId,
+        tools: tools.length > 0 ? tools : undefined
+      };
+    }
+
+  } catch (e) {
+    debugLog(`[Debug] Failed to parse Claude NDJSON output: ${e}`);
     return null;
   }
+  
+  return null;
 }
 
 /**
