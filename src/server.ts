@@ -429,6 +429,10 @@ export class ClaudeCodeServer {
                 type: 'number',
                 description: 'The process ID returned by run tool.',
               },
+              verbose: {
+                type: 'boolean',
+                description: 'Optional: If true, returns detailed execution information including tool usage history. Defaults to false.',
+              }
             },
             required: ['pid'],
           },
@@ -626,7 +630,7 @@ export class ClaudeCodeServer {
     } else {
       // Handle Claude (default)
       cliPath = this.claudeCliPath;
-      processArgs = ['--dangerously-skip-permissions', '--output-format', 'json'];
+      processArgs = ['--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose'];
 
       // Add session_id if provided (Claude only)
       if (toolArguments.session_id && typeof toolArguments.session_id === 'string') {
@@ -740,7 +744,7 @@ export class ClaudeCodeServer {
   /**
    * Helper to get process result object
    */
-  private getProcessResultHelper(pid: number): any {
+  private getProcessResultHelper(pid: number, verbose: boolean = false): any {
     const process = processManager.get(pid);
 
     if (!process) {
@@ -749,10 +753,12 @@ export class ClaudeCodeServer {
 
     // Parse output based on agent type
     let agentOutput: any = null;
-    if (process.stdout) {
-      if (process.toolType === 'codex') {
-        agentOutput = parseCodexOutput(process.stdout);
-      } else if (process.toolType === 'claude') {
+    if (process.toolType === 'codex') {
+      // Codex may output structured logs to stderr
+      const combinedOutput = (process.stdout || '') + '\n' + (process.stderr || '');
+      agentOutput = parseCodexOutput(combinedOutput);
+    } else if (process.stdout) {
+      if (process.toolType === 'claude') {
         agentOutput = parseClaudeOutput(process.stdout);
       } else if (process.toolType === 'gemini') {
         agentOutput = parseGeminiOutput(process.stdout);
@@ -773,7 +779,14 @@ export class ClaudeCodeServer {
 
     // If we have valid output from agent, include it
     if (agentOutput) {
-      response.agentOutput = agentOutput;
+      // Filter out tools if not verbose
+      if (!verbose && agentOutput.tools) {
+        const { tools, ...rest } = agentOutput;
+        response.agentOutput = rest;
+      } else {
+        response.agentOutput = agentOutput;
+      }
+      
       // Extract session_id if available
       if (agentOutput.session_id) {
         response.session_id = agentOutput.session_id;
@@ -796,7 +809,8 @@ export class ClaudeCodeServer {
     }
 
     const pid = toolArguments.pid;
-    const response = this.getProcessResultHelper(pid);
+    const verbose = !!toolArguments.verbose;
+    const response = this.getProcessResultHelper(pid, verbose);
 
     return {
       content: [{
@@ -855,8 +869,8 @@ export class ClaudeCodeServer {
       throw new McpError(ErrorCode.InternalError, error.message);
     }
 
-    // Collect results
-    const results = pids.map(pid => this.getProcessResultHelper(pid));
+    // Collect results (verbose=false for wait)
+    const results = pids.map(pid => this.getProcessResultHelper(pid, false));
 
     return {
       content: [{

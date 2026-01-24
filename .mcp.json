@@ -3,7 +3,8 @@
     "acm-dev": {
       "command": "npm",
       "args": [
-        "start"
+        "run",
+        "dev"
       ]
     }
   }
