@@ -34,6 +34,13 @@ export function parseCodexOutput(stdout: string): any {
               input: parsed.item.arguments, // Map arguments to input to match common patterns
               output: parsed.item.result
             });
+          } else if (parsed.type === 'item.completed' && parsed.item?.type === 'command_execution') {
+            tools.push({
+              tool: 'command_execution',
+              input: { command: parsed.item.command },
+              output: parsed.item.aggregated_output,
+              exit_code: parsed.item.exit_code
+            });
           }
         } catch (e) {
           // Skip invalid JSON lines
