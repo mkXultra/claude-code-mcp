@@ -20,7 +20,7 @@ This MCP server provides tools that can be used by LLMs to interact with AI CLI 
 - Run Claude CLI with all permissions bypassed (using `--dangerously-skip-permissions`)
 - Execute Codex CLI with automatic approval mode (using `--full-auto`)
 - Execute Gemini CLI with automatic approval mode (using `-y`)
-- Support multiple AI models: Claude (sonnet, opus, haiku), Codex (gpt-5.2-codex, gpt-5.1-codex-mini, gpt-5.1-codex-max, gpt-5.2, gpt-5.1, gpt-5.1-codex, gpt-5-codex, gpt-5-codex-mini, gpt-5), and Gemini (gemini-2.5-pro, gemini-2.5-flash, gemini-3-pro-preview)
+- Support multiple AI models: Claude (sonnet, opus, haiku), Codex (gpt-5.2-codex, gpt-5.1-codex-mini, gpt-5.1-codex-max, gpt-5.2, gpt-5.1, gpt-5.1-codex, gpt-5-codex, gpt-5-codex-mini, gpt-5), and Gemini (gemini-2.5-pro, gemini-2.5-flash, gemini-3-pro-preview, gemini-3-flash-preview)
 - Manage background processes with PID tracking
 - Parse and return structured outputs from both tools
 
@@ -135,9 +135,9 @@ Executes a prompt using Claude CLI, Codex CLI, or Gemini CLI. The appropriate CL
 - **Ultra Aliases:** `claude-ultra`, `codex-ultra` (defaults to high-reasoning), `gemini-ultra`
 - Claude: `sonnet`, `opus`, `haiku`
 - Codex: `gpt-5.2-codex`, `gpt-5.1-codex-mini`, `gpt-5.1-codex-max`, `gpt-5.2`, `gpt-5.1`, `gpt-5`
-- Gemini: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3-pro-preview`
+- Gemini: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3-pro-preview`, `gemini-3-flash-preview`
 - `reasoning_effort` (string, optional): Codex only. Sets `model_reasoning_effort` (allowed: "low", "medium", "high").
-- `session_id` (string, optional): Optional session ID to resume a previous session. Supported for: haiku, sonnet, opus, gemini-2.5-pro, gemini-2.5-flash, gemini-3-pro-preview.
+- `session_id` (string, optional): Optional session ID to resume a previous session. Supported for: haiku, sonnet, opus, gemini-2.5-pro, gemini-2.5-flash, gemini-3-pro-preview, gemini-3-flash-preview.
 
 ### `wait`
 
@@ -292,7 +292,7 @@ This will open a web interface where you can:
 3. Test different AI models including:
    - Claude models: `sonnet`, `opus`, `haiku`
    - Codex models: `gpt-5.2-codex`, `gpt-5.1-codex-mini`, `gpt-5.1-codex-max`, `gpt-5.2`, `gpt-5.1`, `gpt-5.1-codex`, `gpt-5-codex`, `gpt-5-codex-mini`, `gpt-5`
-   - Gemini models: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3-pro-preview`
+   - Gemini models: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3-pro-preview`, `gemini-3-flash-preview`
 
 Example test: Select the `run` tool and provide:
 - `prompt`: "What is 2+2?"
