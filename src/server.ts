@@ -20,7 +20,10 @@ const SERVER_VERSION = "2.2.0";
 
 // Model alias mappings for user-friendly model names
 const MODEL_ALIASES: Record<string, string> = {
-  'haiku': 'claude-3-5-haiku-20241022'
+  'haiku': 'claude-3-5-haiku-20241022',
+  'claude-ultra': 'opus',
+  'codex-ultra': 'gpt-5.2-codex',
+  'gemini-ultra': 'gemini-3-pro-preview'
 };
 
 const ALLOWED_REASONING_EFFORTS = new Set(['low', 'medium', 'high']);
@@ -366,7 +369,7 @@ export class ClaudeCodeServer {
 **IMPORTANT**: This tool now returns immediately with a PID. Use other tools to check status and get results.
 
 **Supported models**:
-"sonnet", "opus", "haiku", "gpt-5.2-codex", "gpt-5.1-codex-mini", "gpt-5.1-codex-max", "gpt-5.2", "gpt-5.1", "gpt-5.1-codex", "gpt-5-codex", "gpt-5-codex-mini", "gpt-5", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-3-pro-preview"
+"claude-ultra", "codex-ultra", "gemini-ultra", "sonnet", "opus", "haiku", "gpt-5.2-codex", "gpt-5.1-codex-mini", "gpt-5.1-codex-max", "gpt-5.2", "gpt-5.1", "gpt-5.1-codex", "gpt-5-codex", "gpt-5-codex-mini", "gpt-5", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-3-pro-preview", "gemini-3-flash-preview"
 
 **Prompt input**: You must provide EITHER prompt (string) OR prompt_file (file path), but not both.
 
@@ -394,7 +397,7 @@ export class ClaudeCodeServer {
               },
               model: {
                 type: 'string',
-                description: 'The model to use: "sonnet", "opus", "haiku", "gpt-5.2-codex", "gpt-5.1-codex-mini", "gpt-5.1-codex-max", "gpt-5.2", "gpt-5.1", "gpt-5.1-codex", "gpt-5-codex", "gpt-5-codex-mini", "gpt-5", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-3-pro-preview".',
+                description: 'The model to use. Aliases: "claude-ultra", "codex-ultra" (auto high-reasoning), "gemini-ultra". Standard: "sonnet", "opus", "haiku", "gpt-5.2-codex", "gpt-5.1-codex-mini", "gpt-5.1", "gemini-2.5-pro", "gemini-3-pro-preview", "gemini-3-flash-preview", etc.',
               },
               reasoning_effort: {
                 type: 'string',
@@ -402,7 +405,7 @@ export class ClaudeCodeServer {
               },
               session_id: {
                 type: 'string',
-                description: 'Optional session ID to resume a previous session. Supported for: haiku, sonnet, opus, gemini-2.5-pro, gemini-2.5-flash, gemini-3-pro-preview.',
+                description: 'Optional session ID to resume a previous session. Supported for: haiku, sonnet, opus, gemini-2.5-pro, gemini-2.5-flash, gemini-3-pro-preview, gemini-3-flash-preview.',
               },
             },
             required: ['workFolder'],
@@ -558,13 +561,21 @@ export class ClaudeCodeServer {
     }
 
     // Determine which agent to use based on model name
-    const model = toolArguments.model || '';
-    const reasoningEffort = getReasoningEffort(model, toolArguments.reasoning_effort);
+    const rawModel = toolArguments.model || '';
+    const resolvedModel = resolveModelAlias(rawModel);
+
+    // Special handling for codex-ultra: default to high reasoning effort if not specified
+    let reasoningEffortArg = toolArguments.reasoning_effort;
+    if (rawModel === 'codex-ultra' && !reasoningEffortArg) {
+      reasoningEffortArg = 'high';
+    }
+
+    const reasoningEffort = getReasoningEffort(resolvedModel, reasoningEffortArg);
     let agent: 'codex' | 'claude' | 'gemini';
 
-    if (model.startsWith('gpt-')) {
+    if (resolvedModel.startsWith('gpt-')) {
       agent = 'codex';
-    } else if (model.startsWith('gemini')) {
+    } else if (resolvedModel.startsWith('gemini')) {
       agent = 'gemini';
     } else {
       agent = 'claude';
@@ -588,8 +599,8 @@ export class ClaudeCodeServer {
       if (reasoningEffort) {
         processArgs.push('-c', `model_reasoning_effort=${reasoningEffort}`);
       }
-      if (toolArguments.model) {
-        processArgs.push('--model', toolArguments.model);
+      if (resolvedModel) {
+        processArgs.push('--model', resolvedModel);
       }
 
       processArgs.push('--full-auto', '--json', prompt);
@@ -605,8 +616,8 @@ export class ClaudeCodeServer {
       }
 
       // Add model if specified
-      if (toolArguments.model) {
-        processArgs.push('--model', toolArguments.model);
+      if (resolvedModel) {
+        processArgs.push('--model', resolvedModel);
       }
 
       // Add prompt as positional argument
@@ -623,8 +634,7 @@ export class ClaudeCodeServer {
       }
 
       processArgs.push('-p', prompt);
-      if (toolArguments.model && typeof toolArguments.model === 'string') {
-        const resolvedModel = resolveModelAlias(toolArguments.model);
+      if (resolvedModel) {
         processArgs.push('--model', resolvedModel);
       }
     }
