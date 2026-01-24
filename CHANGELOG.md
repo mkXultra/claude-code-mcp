@@ -1,3 +1,12 @@
+# [2.5.0](https://github.com/mkXultra/claude-code-mcp/compare/v2.4.0...v2.5.0) (2026-01-24)
+
+
+### Features
+
+* enhance output parsers for Codex and Claude with tool usage extraction ([b6410a1](https://github.com/mkXultra/claude-code-mcp/commit/b6410a104666eca592735acea093b877c0f03f64))
+* track command execution in Codex output and include .gemini config ([91f7f06](https://github.com/mkXultra/claude-code-mcp/commit/91f7f067a1d453fd8e3a5a95bb90f21b7df0af8a))
+* update Claude CLI args to stream-json and add verbose option to get_result ([b7f9abc](https://github.com/mkXultra/claude-code-mcp/commit/b7f9abc11c56ad0c8c95e90a614d1d869d8a3bfa))
+
 # [2.4.0](https://github.com/mkXultra/claude-code-mcp/compare/v2.3.3...v2.4.0) (2026-01-24)
 
 
