@@ -1,3 +1,10 @@
+# [2.23.0](https://github.com/mkXultra/ai-cli-mcp/compare/v2.22.1...v2.23.0) (2026-09-06)
+
+
+### Features
+
+* add GPT-6 Astra and update codex-ultra ([d41bc05](https://github.com/mkXultra/ai-cli-mcp/commit/d41bc056ee2e395cc280d8682d3454cb87829bb4))
+
 ## [2.22.1](https://github.com/mkXultra/ai-cli-mcp/compare/v2.22.0...v2.22.1) (2026-08-28)
 
 
