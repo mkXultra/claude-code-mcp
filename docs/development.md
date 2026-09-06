@@ -147,7 +147,8 @@ This will open a web interface where you can:
 3. Test different AI models including:
    - Claude models: `sonnet`, `sonnet[1m]`, `opus`, `opusplan`, `fable`, `haiku`
    - Codex models: `gpt-6-astra`, `gpt-5.4`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.4-mini`, `gpt-5.3-codex`, `gpt-5.3-codex-spark`, `gpt-5.2`
-   - Gemini models: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3-pro-preview`, `gemini-3-flash-preview`
+   - Gemini models (default `gemini-cli` backend): `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3-pro-preview`, `gemini-3-flash-preview`
+   - Gemini models (`GEMINI_CLI_BACKEND=antigravity`): `Gemini 3.8 Flash (High|Medium|Low)`, `Gemini 3.7 Flash (High|Medium|Low)`, `Gemini 3.6 Flash (High|Medium|Low)`, `Gemini 3.1 Pro (High|Low)`
 
 Example test: Select the `run` tool and provide:
 - `prompt`: "What is 2+2?"
@@ -160,7 +161,9 @@ Example test: Select the `run` tool and provide:
 |----------|-------------|
 | `CLAUDE_CLI_NAME` | Claude CLI binary name or absolute path (default: `claude`) |
 | `CODEX_CLI_NAME` | Codex CLI binary name or absolute path (default: `codex`) |
-| `GEMINI_CLI_NAME` | Gemini CLI binary name or absolute path (default: `gemini`) |
+| `GEMINI_CLI_NAME` | Gemini CLI binary name or absolute path (default: `gemini`, or `agy` when `GEMINI_CLI_BACKEND=antigravity`) |
+| `GEMINI_CLI_BACKEND` | CLI that serves the `gemini` agent — `gemini-cli` (default), `antigravity`, or `auto` |
+| `GEMINI_PRINT_TIMEOUT` | Antigravity backend only: value passed to `agy --print-timeout` (default: `2h`) |
 | `MCP_CLAUDE_DEBUG` | Enable debug logging — `true` / `false` (default: `false`) |
 
 These can be set in your shell environment or within the `env` block of your `mcp.json` server configuration.

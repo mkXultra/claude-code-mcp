@@ -19,13 +19,13 @@ Cursorなどのエディタが、複雑な手順を伴う編集や操作に苦�
 
 - すべての権限確認をスキップしてClaude CLIを実行（`--dangerously-skip-permissions` を使用）
 - 承認とサンドボックスをバイパスしてCodex CLIを実行（`--dangerously-bypass-approvals-and-sandbox` を使用）
-- 自動承認モードでGemini CLIを実行（`-y` を使用）
+- 自動承認モードでGemini CLIを実行（`-y` を使用）。`GEMINI_CLI_BACKEND=antigravity` を設定すると、`gemini` エージェントを Antigravity CLI（`agy`）で動かすこともできます
 - Forge CLI を非対話モードで実行（`forge -C <workFolder> -p <prompt>` を使用）
 - OpenCode を非対話 JSON モードで実行（`opencode run --format json --dir <workFolder> <prompt>` を使用）
 - 複数のAIモデルのサポート：
     - Claude (sonnet, sonnet[1m], opus, opusplan, fable, haiku)
     - Codex (gpt-6-astra, gpt-5.4, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.4-mini, gpt-5.3-codex, gpt-5.3-codex-spark, gpt-5.2)
-    - Gemini (gemini-2.5-pro, gemini-2.5-flash, gemini-3.1-pro-preview, gemini-3-pro-preview, gemini-3-flash-preview)
+    - Gemini (gemini-2.5-pro, gemini-2.5-flash, gemini-3.1-pro-preview, gemini-3-pro-preview, gemini-3-flash-preview。`GEMINI_CLI_BACKEND=antigravity` を設定すると Antigravity 用の別カタログを使用)
     - Forge (`forge`)
     - OpenCode (`opencode` と `oc-<provider/model>` ラッパー。例: `oc-openai/gpt-5.4`)
 - PID追跡によるバックグラウンドプロセスの管理
@@ -170,6 +170,23 @@ codex login
 gemini auth login
 ```
 
+### Antigravity CLIの場合（Gemini バックエンドの任意選択）:
+
+`gemini` エージェントは既定で Gemini CLI を使用します。代わりに Antigravity CLI を
+使いたい場合は、公式の `agy` バイナリをインストールしてログインし、
+`GEMINI_CLI_BACKEND=antigravity` を設定してください。
+
+```bash
+# 公式の Antigravity CLI をインストールしてから:
+agy login
+export GEMINI_CLI_BACKEND=antigravity
+```
+
+この環境変数を設定しない限り挙動は一切変わりません。既定値は `gemini-cli`、既定の
+バイナリは `gemini` のままで、`ai-cli doctor` が `agy` を探すのは Antigravity
+バックエンドを選択したときだけです。詳細は
+[Gemini バックエンド](#gemini-バックエンド) を参照してください。
+
 macOSでは、これらのツールを初めて実行する際にフォルダへのアクセス許可を求められる場合があります。最初の実行が失敗しても、2回目以降は動作するはずです。
 
 ## CLI コマンド
@@ -263,10 +280,11 @@ Claude CLI、Codex CLI、Gemini CLI、Forge CLI、または OpenCode を使用�
     - Claude: `sonnet`, `sonnet[1m]`, `opus`, `opusplan`, `fable`, `haiku`
       - `fable` は Claude Code の最新 Fable モデルを明示的に選択します。Fable には別料金の usage credits が必要な場合があり、`claude-ultra` から暗黙には選択されません。
     - Codex: `gpt-6-astra`, `gpt-5.4`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.4-mini`, `gpt-5.3-codex`, `gpt-5.3-codex-spark`, `gpt-5.2`
-    - Gemini: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3.1-pro-preview`, `gemini-3-pro-preview`, `gemini-3-flash-preview`
+    - Gemini（既定の `gemini-cli` バックエンド）: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3.1-pro-preview`, `gemini-3-pro-preview`, `gemini-3-flash-preview`
+    - Gemini（`antigravity` バックエンド）: `Gemini 3.8 Flash (High|Medium|Low)`, `Gemini 3.7 Flash (High|Medium|Low)`, `Gemini 3.6 Flash (High|Medium|Low)`, `Gemini 3.1 Pro (High|Low)`。加えて `gemini-3.8-flash-high`, `gemini-3.8-flash`, `gemini-3.8-flash-low` などの小文字エイリアス（3.7 / 3.6 / 3.1 も同様）が使えます。もう一方のバックエンドのモデルを指定した場合は、必要な `GEMINI_CLI_BACKEND` の値を示す明示的なエラーになります。
     - Forge: `forge`
     - OpenCode: `opencode`（設定済みのデフォルトモデル）および `oc-openai/gpt-5.4` のような明示ラッパー
-- `reasoning_effort` (string, 任意): Claude と Codex の推論制御。Claude では `--effort` を使います（許容値: "low", "medium", "high", "xhigh", "max"）。Codex では `model_reasoning_effort` を使います（基本値: "low", "medium", "high", "xhigh"。GPT-6 Astra と GPT-5.6 Sol/Terra は "max" と "ultra"、GPT-5.6 Luna は "max" にも対応）。Gemini、Forge、OpenCode では `reasoning_effort` はサポートしません。
+- `reasoning_effort` (string, 任意): Claude と Codex の推論制御。Claude では `--effort` を使います（許容値: "low", "medium", "high", "xhigh", "max"）。Codex では `model_reasoning_effort` を使います（基本値: "low", "medium", "high", "xhigh"。GPT-6 Astra と GPT-5.6 Sol/Terra は "max" と "ultra"、GPT-5.6 Luna は "max" にも対応）。Forge と OpenCode では `reasoning_effort` はサポートしません。Gemini も既定の `gemini-cli` バックエンドではサポートしませんが、`antigravity` バックエンドでは "low", "medium", "high" を受け付け、対応するモデル variant を選択します（例: `gemini-3.8-flash` に `reasoning_effort: "high"` を指定すると `Gemini 3.8 Flash (High)` を実行）。Gemini 3.1 Pro は "low" と "high" のみです。
 - `session_id` (string, 任意): 以前のセッションを再開するためのセッションID。Claude、Codex、Gemini、Forge、OpenCode でサポートされます。OpenCode は `--session` による in-place resume で再開し、`oc-<provider/model>` の明示指定と併用できます。
 
 ### `wait`
@@ -409,13 +427,35 @@ ACM_LIVE_E2E=1 ACM_LIVE_E2E_SURFACE=all ACM_LIVE_E2E_AGENTS=claude,codex npm run
 
 live E2E は opt-in です。インストール済みかつ認証済みの外部 CLI、ネットワーク、provider 側の可用性、コスト予算に依存するため、通常の `npm test` には含めていません。`ACM_LIVE_E2E_SURFACE` は既定で `cli` です。MCP server surface も含める場合は `mcp` または `all` を指定します。
 
+## Gemini バックエンド
+
+`gemini` エージェントは2種類のCLIで動かせます。どちらを使うかは
+`GEMINI_CLI_BACKEND` で選択し、既定値は従来の挙動をそのまま維持します。
+
+| 値 | 挙動 |
+| --- | --- |
+| `gemini-cli`（デフォルト） | 従来どおりの Gemini CLI。バイナリ `gemini`、引数 `-y --output-format stream-json`、`gemini-2.5-*` / `gemini-3-*` カタログ。 |
+| `antigravity` | Antigravity CLI。バイナリ `agy`、引数 `--dangerously-skip-permissions --print-timeout <timeout> [--log-file <path>] [--conversation <id>] --model "<name>" -p <prompt>`、`Gemini 3.x` 表示名カタログ。 |
+| `auto` | 解決された Gemini コマンドが `agy`（または `agy-*`）なら Antigravity、それ以外は Gemini CLI。 |
+
+Antigravity バックエンドの注意点:
+
+- 推論レベルはモデル名の一部なので、`reasoning_effort` はCLIフラグではなく対応する
+  カタログ variant の選択になります。
+- `agy` は stream JSON ではなくプレーンテキストを出力します。セッション再開に使う
+  conversation id は、アダプタが `--log-file` で渡す一時ログファイルから読み取ります。
+- `--print-timeout` の既定値は `2h` で、`GEMINI_PRINT_TIMEOUT` で上書きできます。
+- `models` ツールは両方のカタログと、現在有効なバックエンドを返します。
+
 ## 高度な設定（オプション）
 
 通常の利用では設定不要ですが、CLIツールのパスをカスタマイズしたい場合やデバッグが必要な場合に使用できる環境変数です。
 
 - `CLAUDE_CLI_NAME`: Claude CLIのバイナリ名または絶対パスを上書き（デフォルト: `claude`）
 - `CODEX_CLI_NAME`: Codex CLIのバイナリ名または絶対パスを上書き（デフォルト: `codex`）
-- `GEMINI_CLI_NAME`: Gemini CLIのバイナリ名または絶対パスを上書き（デフォルト: `gemini`）
+- `GEMINI_CLI_NAME`: Gemini CLIのバイナリ名または絶対パスを上書き（デフォルト: `gemini`。`GEMINI_CLI_BACKEND=antigravity` の場合は `agy`）
+- `GEMINI_CLI_BACKEND`: `gemini` エージェントを動かすCLIの選択: `gemini-cli`（デフォルト）、`antigravity`、`auto`。未知の値はエラーになります
+- `GEMINI_PRINT_TIMEOUT`: Antigravity バックエンド専用。`agy --print-timeout` に渡す値（デフォルト: `2h`）
 - `FORGE_CLI_NAME`: Forge CLIのバイナリ名または絶対パスを上書き（デフォルト: `forge`）
 - `OPENCODE_CLI_NAME`: OpenCode CLIのバイナリ名または絶対パスを上書き（デフォルト: `opencode`）
 - `MCP_CLAUDE_DEBUG`: デバッグログを有効化（`true` に設定すると詳細な出力が表示されます）
