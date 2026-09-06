@@ -38,8 +38,8 @@ describe('cli-builder', () => {
       expect(resolveModelAlias('claude-ultra')).toBe('opus');
     });
 
-    it('should resolve codex-ultra to gpt-5.6-sol', () => {
-      expect(resolveModelAlias('codex-ultra')).toBe('gpt-5.6-sol');
+    it('should resolve codex-ultra to gpt-6-astra', () => {
+      expect(resolveModelAlias('codex-ultra')).toBe('gpt-6-astra');
     });
 
     it('should resolve gemini-ultra to gemini-3.1-pro-preview', () => {
@@ -79,6 +79,8 @@ describe('cli-builder', () => {
       expect(getReasoningEffort('gpt-5.2', 'medium')).toBe('medium');
       expect(getReasoningEffort('gpt-5.2', 'high')).toBe('high');
       expect(getReasoningEffort('gpt-5.2', 'xhigh')).toBe('xhigh');
+      expect(getReasoningEffort('gpt-6-astra', 'max')).toBe('max');
+      expect(getReasoningEffort('gpt-6-astra', 'ultra')).toBe('ultra');
       expect(getReasoningEffort('gpt-5.6-sol', 'max')).toBe('max');
       expect(getReasoningEffort('gpt-5.6-sol', 'ultra')).toBe('ultra');
       expect(getReasoningEffort('gpt-5.6-terra', 'ultra')).toBe('ultra');
@@ -412,7 +414,7 @@ describe('cli-builder', () => {
         expect(cmd.args).toContain('gpt-5.3-codex');
       });
 
-      it.each(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+      it.each(['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
         'should build codex command for %s',
         (model) => {
           const cmd = buildCliCommand({
@@ -465,7 +467,8 @@ describe('cli-builder', () => {
         });
 
         expect(cmd.agent).toBe('codex');
-        expect(cmd.resolvedModel).toBe('gpt-5.6-sol');
+        expect(cmd.resolvedModel).toBe('gpt-6-astra');
+        expect(cmd.args[cmd.args.indexOf('--model') + 1]).toBe('gpt-6-astra');
         expect(cmd.args).toContain('-c');
         expect(cmd.args).toContain('model_reasoning_effort=ultra');
       });
