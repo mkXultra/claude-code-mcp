@@ -117,6 +117,7 @@ describe('MCP Contract Tests', () => {
     expect(runTool.inputSchema.properties.model.description).toContain('opencode');
     expect(runTool.inputSchema.properties.model.description).toContain('oc-<provider/model>');
     expect(runTool.inputSchema.properties.model.description).toContain('auto ultra reasoning');
+    expect(runTool.inputSchema.properties.model.description).toContain('gpt-6-astra');
     expect(runTool.inputSchema.properties.reasoning_effort.description).toContain('"ultra"');
     expect(runTool.inputSchema.properties.reasoning_effort.description).toContain('OpenCode do not support reasoning_effort');
     expect(runTool.inputSchema.properties.session_id.description).toBe(
@@ -169,11 +170,18 @@ describe('MCP Contract Tests', () => {
           agent: 'claude',
           defaultReasoningEffort: 'max',
         }),
+        expect.objectContaining({
+          name: 'codex-ultra',
+          resolvesTo: 'gpt-6-astra',
+          agent: 'codex',
+          defaultReasoningEffort: 'ultra',
+        }),
       ])
     );
     expect(modelsData.claude).toContain('sonnet');
     expect(modelsData.claude).toContain('fable');
     expect(modelsData.codex).toEqual([
+      'gpt-6-astra',
       'gpt-5.4',
       'gpt-5.6-sol',
       'gpt-5.6-terra',

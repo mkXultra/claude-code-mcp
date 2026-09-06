@@ -1,5 +1,6 @@
 export const CLAUDE_MODELS = ['sonnet', 'sonnet[1m]', 'opus', 'opusplan', 'fable', 'haiku'] as const;
 export const CODEX_MODELS = [
+  'gpt-6-astra',
   'gpt-5.4',
   'gpt-5.6-sol',
   'gpt-5.6-terra',
@@ -22,13 +23,13 @@ export const OPENCODE_MODELS = ['opencode'] as const;
 
 export const MODEL_ALIASES: Record<string, string> = {
   'claude-ultra': 'opus',
-  'codex-ultra': 'gpt-5.6-sol',
+  'codex-ultra': 'gpt-6-astra',
   'gemini-ultra': 'gemini-3.1-pro-preview',
 };
 
 export const MODEL_ALIAS_DETAILS = [
   { name: 'claude-ultra', resolvesTo: 'opus', agent: 'claude', defaultReasoningEffort: 'max' },
-  { name: 'codex-ultra', resolvesTo: 'gpt-5.6-sol', agent: 'codex', defaultReasoningEffort: 'ultra' },
+  { name: 'codex-ultra', resolvesTo: 'gpt-6-astra', agent: 'codex', defaultReasoningEffort: 'ultra' },
   { name: 'gemini-ultra', resolvesTo: 'gemini-3.1-pro-preview', agent: 'gemini' },
 ] as const;
 
