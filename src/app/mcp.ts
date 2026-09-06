@@ -10,7 +10,15 @@ import {
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { debugLog, getCliDoctorStatus, type CliBinaryStatus } from '../cli-utils.js';
-import { getModelParameterDescription, getModelsPayload, getSupportedModelsDescription } from '../model-catalog.js';
+import {
+  getModelParameterDescription,
+  getModelsPayload,
+  getReasoningEffortParameterDescription,
+  getSupportedModelsDescription,
+  resolveGeminiBackend,
+  validateGeminiBackendEnv,
+  type GeminiBackend,
+} from '../model-catalog.js';
 import { validatePeekPids, validatePeekTimeSec } from '../peek.js';
 import { ProcessService } from '../process-service.js';
 
@@ -74,12 +82,16 @@ export class ClaudeCodeServer {
   private claudeCliPath: string;
   private codexCliPath: string;
   private geminiCliPath: string;
+  private geminiBackend: GeminiBackend;
   private forgeCliPath: string;
   private opencodeCliPath: string;
   private processService: ProcessService;
   private sigintHandler?: () => Promise<void>;
 
   constructor() {
+    // Fail fast on an unknown GEMINI_CLI_BACKEND instead of silently running
+    // the gemini agent on the wrong CLI.
+    validateGeminiBackendEnv();
     const doctorStatus = getCliDoctorStatus();
     this.claudeCliPath = this.resolveDoctorCliPath(doctorStatus.claude);
     this.codexCliPath = this.resolveDoctorCliPath(doctorStatus.codex);
@@ -91,6 +103,10 @@ export class ClaudeCodeServer {
     console.error(`[Setup] Using Gemini CLI command/path: ${this.geminiCliPath}`);
     console.error(`[Setup] Using Forge CLI command/path: ${this.forgeCliPath}`);
     console.error(`[Setup] Using OpenCode CLI command/path: ${this.opencodeCliPath}`);
+    this.geminiBackend = resolveGeminiBackend({ cliPath: this.geminiCliPath });
+    if (this.geminiBackend !== 'gemini-cli') {
+      console.error(`[Setup] Serving the gemini agent with the ${this.geminiBackend} backend`);
+    }
     this.processService = new ProcessService({
       cliPaths: {
         claude: this.claudeCliPath,
@@ -154,7 +170,7 @@ export class ClaudeCodeServer {
 **IMPORTANT**: This tool now returns immediately with a PID. Use other tools to check status and get results.
 
 **Supported models**:
-${getSupportedModelsDescription()}
+${getSupportedModelsDescription(this.geminiBackend)}
 
 **Prompt input**: You must provide EITHER prompt (string) OR prompt_file (file path), but not both.
 
@@ -182,11 +198,11 @@ ${getSupportedModelsDescription()}
               },
               model: {
                 type: 'string',
-                description: getModelParameterDescription(),
+                description: getModelParameterDescription(this.geminiBackend),
               },
               reasoning_effort: {
                 type: 'string',
-                description: 'Reasoning control for Claude and Codex. Claude uses --effort with "low", "medium", "high", "xhigh", "max". Codex uses model_reasoning_effort with "low", "medium", "high", "xhigh"; GPT-6 Astra and GPT-5.6 Sol/Terra also support "max" and "ultra", while GPT-5.6 Luna supports "max". Gemini, Forge, and OpenCode do not support reasoning_effort in this integration.',
+                description: getReasoningEffortParameterDescription(this.geminiBackend),
               },
               session_id: {
                 type: 'string',
@@ -498,7 +514,7 @@ ${getSupportedModelsDescription()}
     return {
       content: [{
         type: 'text',
-        text: JSON.stringify(getModelsPayload(), null, 2)
+        text: JSON.stringify(getModelsPayload(this.geminiBackend), null, 2)
       }]
     };
   }

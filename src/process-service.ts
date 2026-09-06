@@ -1,6 +1,11 @@
 import type { ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { buildCliCommand, type BuildCliCommandOptions } from './cli-builder.js';
-import { parseClaudeOutput, parseCodexOutput, parseForgeOutput, parseGeminiOutput, parseOpenCodeOutput, PeekEventExtractor } from './parsers.js';
+import type { GeminiBackend } from './model-catalog.js';
+import { parseAntigravityOutput, parseClaudeOutput, parseCodexOutput, parseForgeOutput, parseGeminiOutput, parseOpenCodeOutput, PeekEventExtractor } from './parsers.js';
 import {
   appendPeekEvents,
   buildNotFoundPeekProcess,
@@ -26,6 +31,9 @@ interface TrackedProcess {
   startTime: string;
   stdout: string;
   stderr: string;
+  /** Antigravity only: path of the CLI log file holding the conversation id. */
+  logPath?: string;
+  geminiBackend?: GeminiBackend | null;
   status: ProcessStatus;
   exitCode?: number;
 }
@@ -47,9 +55,18 @@ interface ProcessServiceOptions {
   cliPaths: BuildCliCommandOptions['cliPaths'];
 }
 
-function parseAgentOutput(agent: AgentType, stdout: string, stderr: string): any {
+function parseAgentOutput(
+  agent: AgentType,
+  stdout: string,
+  stderr: string,
+  options: { geminiBackend?: GeminiBackend | null; logText?: string } = {},
+): any {
   if (agent === 'codex') {
     return parseCodexOutput(`${stdout || ''}\n${stderr || ''}`);
+  }
+
+  if (agent === 'gemini' && options.geminiBackend === 'antigravity') {
+    return parseAntigravityOutput(stdout, options.logText || '');
   }
 
   if (!stdout) {
@@ -81,10 +98,22 @@ export class ProcessService {
   }
 
   startProcess(options: Omit<BuildCliCommandOptions, 'cliPaths'>): StartProcessResult {
-    const cmd = buildCliCommand({
+    let cmd = buildCliCommand({
       ...options,
       cliPaths: this.cliPaths,
     });
+
+    // Antigravity prints no conversation id on stdout, so it is asked to write
+    // its internal log to a file the adapter can read the id back from.
+    let logPath: string | undefined;
+    if (cmd.geminiBackend === 'antigravity') {
+      logPath = this.createAntigravityLogPath();
+      cmd = buildCliCommand({
+        ...options,
+        log_file: logPath,
+        cliPaths: this.cliPaths,
+      });
+    }
 
     const { cliPath, args: processArgs, cwd: effectiveCwd, agent, prompt } = cmd;
     let childProcess: ChildProcess;
@@ -121,6 +150,8 @@ export class ProcessService {
       startTime: new Date().toISOString(),
       stdout: '',
       stderr: '',
+      logPath,
+      geminiBackend: cmd.geminiBackend,
       status: 'running',
     };
 
@@ -176,7 +207,10 @@ export class ProcessService {
       throw new Error(`Process with PID ${pid} not found`);
     }
 
-    const agentOutput = parseAgentOutput(process.toolType, process.stdout, process.stderr);
+    const agentOutput = parseAgentOutput(process.toolType, process.stdout, process.stderr, {
+      geminiBackend: process.geminiBackend,
+      logText: process.logPath ? readTextFileSafe(process.logPath) : '',
+    });
 
     return buildProcessResult({
       pid,
@@ -262,8 +296,16 @@ export class ProcessService {
       };
       processes.push(result);
 
-      const stdoutExtractor = new PeekEventExtractor(entry.toolType, { includeToolCalls, source: 'stdout' });
-      const stderrExtractor = new PeekEventExtractor(entry.toolType, { includeToolCalls, source: 'stderr' });
+      const stdoutExtractor = new PeekEventExtractor(entry.toolType, {
+        includeToolCalls,
+        source: 'stdout',
+        geminiBackend: entry.geminiBackend ?? undefined,
+      });
+      const stderrExtractor = new PeekEventExtractor(entry.toolType, {
+        includeToolCalls,
+        source: 'stderr',
+        geminiBackend: entry.geminiBackend ?? undefined,
+      });
       const onStdout = (data: Buffer | string) => {
         appendPeekEvents(result, stdoutExtractor.push(data.toString(), new Date().toISOString()));
       };
@@ -361,6 +403,9 @@ export class ProcessService {
     for (const [pid, process] of this.processManager.entries()) {
       if (process.status === 'completed' || process.status === 'failed') {
         removedPids.push(pid);
+        if (process.logPath) {
+          removeFileSafe(process.logPath);
+        }
         this.processManager.delete(pid);
       }
     }
@@ -370,5 +415,30 @@ export class ProcessService {
       removedPids,
       message: `Cleaned up ${removedPids.length} finished process(es)`,
     };
+  }
+
+  private createAntigravityLogPath(): string {
+    return join(tmpdir() || '.', `ai-cli-mcp-antigravity-${randomUUID()}.log`);
+  }
+}
+
+function readTextFileSafe(filePath: string): string {
+  if (!existsSync(filePath)) {
+    return '';
+  }
+
+  try {
+    const text = readFileSync(filePath, 'utf-8');
+    return typeof text === 'string' ? text : '';
+  } catch {
+    return '';
+  }
+}
+
+function removeFileSafe(filePath: string): void {
+  try {
+    rmSync(filePath, { force: true });
+  } catch {
+    // Best effort: a leftover temp log must never fail cleanup.
   }
 }
