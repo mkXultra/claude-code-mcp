@@ -1,14 +1,27 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve as pathResolve, isAbsolute } from 'node:path';
 import type { CliPaths } from './cli-utils.js';
-import { MODEL_ALIASES } from './model-catalog.js';
+import {
+  ANTIGRAVITY_REASONING_EFFORTS,
+  getAntigravityEffortsForModel,
+  getAntigravityModelBaseName,
+  getModelAliases,
+  getRequiredGeminiBackendForModel,
+  isAntigravityOnlyModel,
+  resolveAntigravityModelForEffort,
+  resolveGeminiBackend,
+  type GeminiBackend,
+} from './model-catalog.js';
 
 export const ALLOWED_REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 const CLAUDE_REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 const CODEX_REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh']);
 const CODEX_MAX_REASONING_MODELS = new Set(['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']);
 const CODEX_ULTRA_REASONING_MODELS = new Set(['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra']);
+const ANTIGRAVITY_ALLOWED_REASONING_EFFORTS = new Set<string>(ANTIGRAVITY_REASONING_EFFORTS);
 const OPENCODE_MODEL_ERROR = 'Invalid OpenCode model. Expected exact syntax oc-<provider/model>.';
+/** Antigravity runs headless one-shot prompts; two hours covers long agent runs. */
+export const DEFAULT_ANTIGRAVITY_PRINT_TIMEOUT = '2h';
 
 type Agent = 'codex' | 'claude' | 'gemini' | 'forge' | 'opencode';
 
@@ -29,6 +42,11 @@ function getStandardAgentForModel(model: string): Exclude<Agent, 'opencode'> {
     return 'codex';
   }
   if (model.startsWith('gemini')) {
+    return 'gemini';
+  }
+  // Antigravity display names such as "Gemini 3.8 Flash (High)" are also the
+  // gemini agent; every other string keeps routing to Claude as before.
+  if (isAntigravityOnlyModel(model)) {
     return 'gemini';
   }
   return 'claude';
@@ -62,7 +80,7 @@ function extractOpenCodeModel(rawModel: string): string {
   return remainder;
 }
 
-function resolveModelSelection(rawModel: string): ModelSelection {
+function resolveModelSelection(rawModel: string, geminiBackend: GeminiBackend): ModelSelection {
   if (rawModel === 'opencode') {
     return {
       agent: 'opencode',
@@ -79,7 +97,7 @@ function resolveModelSelection(rawModel: string): ModelSelection {
     };
   }
 
-  const resolvedModel = resolveModelAlias(rawModel);
+  const resolvedModel = resolveModelAlias(rawModel, geminiBackend);
   return {
     agent: getStandardAgentForModel(resolvedModel),
     resolvedModel,
@@ -87,11 +105,32 @@ function resolveModelSelection(rawModel: string): ModelSelection {
   };
 }
 
-export function resolveModelAlias(model: string): string {
-  return MODEL_ALIASES[model] || model;
+export function resolveModelAlias(model: string, geminiBackend: GeminiBackend = 'gemini-cli'): string {
+  return getModelAliases(geminiBackend)[model] || model;
 }
 
-export function getReasoningEffort(model: string, rawValue: unknown): string {
+/**
+ * Rejects a Gemini model that belongs to the other backend, naming the
+ * GEMINI_CLI_BACKEND value it requires. Identifiers unknown to both catalogs
+ * are passed through to the selected CLI untouched.
+ */
+function assertGeminiModelMatchesBackend(rawModel: string, resolvedModel: string, geminiBackend: GeminiBackend): void {
+  const requiredBackend = getRequiredGeminiBackendForModel(rawModel)
+    ?? getRequiredGeminiBackendForModel(resolvedModel);
+  if (!requiredBackend || requiredBackend === geminiBackend) {
+    return;
+  }
+
+  throw new Error(
+    `Model "${rawModel}" belongs to the ${requiredBackend} Gemini backend and requires GEMINI_CLI_BACKEND=${requiredBackend}. The active Gemini backend is ${geminiBackend}.`
+  );
+}
+
+export function getReasoningEffort(
+  model: string,
+  rawValue: unknown,
+  geminiBackend: GeminiBackend = 'gemini-cli',
+): string {
   if (typeof rawValue !== 'string') {
     return '';
   }
@@ -115,9 +154,17 @@ export function getReasoningEffort(model: string, rawValue: unknown): string {
     throw new Error('reasoning_effort is not supported for forge.');
   }
   if (agent === 'gemini') {
-    throw new Error(
-      'reasoning_effort is only supported for Claude and Codex models.'
-    );
+    if (geminiBackend !== 'antigravity') {
+      throw new Error(
+        'reasoning_effort is only supported for Claude and Codex models.'
+      );
+    }
+    if (!ANTIGRAVITY_ALLOWED_REASONING_EFFORTS.has(normalized)) {
+      throw new Error(
+        'Gemini reasoning_effort supports only low, medium, high.'
+      );
+    }
+    return normalized;
   }
   if (agent === 'claude' && !CLAUDE_REASONING_EFFORTS.has(normalized)) {
     throw new Error(
@@ -149,6 +196,8 @@ export interface CliCommand {
   agent: Agent;
   prompt: string;
   resolvedModel: string;
+  /** Backend serving the gemini agent, or null for every other agent. */
+  geminiBackend: GeminiBackend | null;
 }
 
 export interface BuildCliCommandOptions {
@@ -158,6 +207,10 @@ export interface BuildCliCommandOptions {
   model?: string;
   session_id?: string;
   reasoning_effort?: string;
+  /** Antigravity only: file the CLI writes its internal log to. */
+  log_file?: string;
+  /** Antigravity only: value of --print-timeout. */
+  antigravityPrintTimeout?: string;
   cliPaths: CliPaths;
 }
 
@@ -202,7 +255,11 @@ export function buildCliCommand(options: BuildCliCommandOptions): CliCommand {
   }
 
   const rawModel = options.model || '';
-  const { agent, resolvedModel, openCodeModel } = resolveModelSelection(rawModel);
+  const geminiBackend = resolveGeminiBackend({ cliPath: options.cliPaths.gemini });
+  const { agent, resolvedModel, openCodeModel } = resolveModelSelection(rawModel, geminiBackend);
+  if (agent === 'gemini') {
+    assertGeminiModelMatchesBackend(rawModel, resolvedModel, geminiBackend);
+  }
 
   let reasoningEffortArg: string | undefined = options.reasoning_effort;
   if (!reasoningEffortArg) {
@@ -216,7 +273,24 @@ export function buildCliCommand(options: BuildCliCommandOptions): CliCommand {
   const reasoningTargetModel = rawModel === 'opencode' || rawModel.startsWith('oc-')
     ? rawModel
     : (resolvedModel || rawModel);
-  const reasoningEffort = getReasoningEffort(reasoningTargetModel, reasoningEffortArg);
+  const reasoningEffort = getReasoningEffort(reasoningTargetModel, reasoningEffortArg, geminiBackend);
+
+  // Antigravity picks the reasoning level through the model NAME, so a
+  // reasoning_effort for the gemini agent becomes the (Low|Medium|High) variant.
+  let effectiveModel = resolvedModel;
+  if (agent === 'gemini' && geminiBackend === 'antigravity' && reasoningEffort) {
+    const variant = resolveAntigravityModelForEffort(resolvedModel, reasoningEffort);
+    if (!variant) {
+      const supported = getAntigravityEffortsForModel(resolvedModel);
+      const baseName = getAntigravityModelBaseName(resolvedModel) || resolvedModel;
+      throw new Error(
+        supported.length > 0
+          ? `Gemini reasoning_effort for ${baseName} supports only ${supported.join(', ')}.`
+          : `reasoning_effort is not supported for Gemini model ${resolvedModel}.`
+      );
+    }
+    effectiveModel = variant;
+  }
 
   let cliPath: string;
   let args: string[];
@@ -238,6 +312,30 @@ export function buildCliCommand(options: BuildCliCommandOptions): CliCommand {
     }
 
     args.push('--skip-git-repo-check', '--dangerously-bypass-approvals-and-sandbox', '--json', prompt);
+  } else if (agent === 'gemini' && geminiBackend === 'antigravity') {
+    // Antigravity CLI (agy), headless one-shot mode: -p prints the answer,
+    // --dangerously-skip-permissions auto-approves tools, --model takes the
+    // display name (or its slug), and sessions resume through --conversation.
+    // agy supports neither -y nor --output-format; stdout is plain text.
+    cliPath = options.cliPaths.gemini;
+    const printTimeout = options.antigravityPrintTimeout?.trim()
+      || process.env.GEMINI_PRINT_TIMEOUT?.trim()
+      || DEFAULT_ANTIGRAVITY_PRINT_TIMEOUT;
+    args = ['--dangerously-skip-permissions', '--print-timeout', printTimeout];
+
+    if (options.log_file && typeof options.log_file === 'string' && options.log_file.trim()) {
+      args.push('--log-file', options.log_file);
+    }
+
+    if (options.session_id && typeof options.session_id === 'string') {
+      args.push('--conversation', options.session_id);
+    }
+
+    if (effectiveModel) {
+      args.push('--model', effectiveModel);
+    }
+
+    args.push('-p', prompt);
   } else if (agent === 'gemini') {
     cliPath = options.cliPaths.gemini;
     args = ['-y', '--output-format', 'stream-json'];
@@ -291,5 +389,13 @@ export function buildCliCommand(options: BuildCliCommandOptions): CliCommand {
     }
   }
 
-  return { cliPath, args, cwd, agent, prompt, resolvedModel };
+  return {
+    cliPath,
+    args,
+    cwd,
+    agent,
+    prompt,
+    resolvedModel: effectiveModel,
+    geminiBackend: agent === 'gemini' ? geminiBackend : null,
+  };
 }

@@ -63,5 +63,6 @@ run("洗い出した問題を修正して", session_id="def-456", model="sonnet"
 | CLI | 内部で実行されるフラグ |
 |---|---|
 | Claude | `-r <session_id> --fork-session` |
-| Gemini | `-r <session_id>` |
+| Gemini (`gemini-cli` バックエンド、既定) | `-r <session_id>` |
+| Gemini (`GEMINI_CLI_BACKEND=antigravity`) | `--conversation <session_id>` |
 | Codex | `exec resume <session_id>` |

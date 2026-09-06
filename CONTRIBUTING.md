@@ -73,7 +73,9 @@ Then use `ai-cli-mcp` command globally.
 |----------|-------------|
 | `CLAUDE_CLI_NAME` | Claude CLI binary name or absolute path |
 | `CODEX_CLI_NAME` | Codex CLI binary name or absolute path |
-| `GEMINI_CLI_NAME` | Gemini CLI binary name or absolute path |
+| `GEMINI_CLI_NAME` | Gemini CLI binary name or absolute path (default: `gemini`, or `agy` when `GEMINI_CLI_BACKEND=antigravity`) |
+| `GEMINI_CLI_BACKEND` | CLI that serves the `gemini` agent: `gemini-cli` (default), `antigravity`, or `auto` |
+| `GEMINI_PRINT_TIMEOUT` | Antigravity backend only: value passed to `agy --print-timeout` (default: `2h`) |
 | `MCP_CLAUDE_DEBUG` | Enable debug logging (`true`/`false`) |
 
 ## Release Process

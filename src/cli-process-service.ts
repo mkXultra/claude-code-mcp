@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import {
   appendFileSync,
   closeSync,
@@ -19,7 +20,8 @@ import { join, basename, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { buildCliCommand, type BuildCliCommandOptions } from './cli-builder.js';
 import { findClaudeCli, findCodexCli, findForgeCli, findGeminiCli, findOpencodeCli } from './cli-utils.js';
-import { parseClaudeOutput, parseCodexOutput, parseForgeOutput, parseGeminiOutput, parseOpenCodeOutput, PeekEventExtractor } from './parsers.js';
+import type { GeminiBackend } from './model-catalog.js';
+import { parseAntigravityOutput, parseClaudeOutput, parseCodexOutput, parseForgeOutput, parseGeminiOutput, parseOpenCodeOutput, PeekEventExtractor } from './parsers.js';
 import { buildProcessResult } from './process-result.js';
 import {
   appendPeekEvents,
@@ -42,6 +44,9 @@ interface StoredProcess {
   startTime: string;
   stdoutPath: string;
   stderrPath: string;
+  /** Antigravity only: path of the CLI log file holding the conversation id. */
+  logPath?: string;
+  geminiBackend?: GeminiBackend | null;
   status: 'running' | 'completed' | 'failed';
   exitCode?: number;
 }
@@ -90,9 +95,18 @@ function normalizeCwdForStorage(cwd: string): string {
     .join('');
 }
 
-function parseAgentOutput(agent: AgentType, stdout: string, stderr: string): any {
+function parseAgentOutput(
+  agent: AgentType,
+  stdout: string,
+  stderr: string,
+  options: { geminiBackend?: GeminiBackend | null; logText?: string } = {},
+): any {
   if (agent === 'codex') {
     return parseCodexOutput(`${stdout}\n${stderr}`);
+  }
+
+  if (agent === 'gemini' && options.geminiBackend === 'antigravity') {
+    return parseAntigravityOutput(stdout, options.logText || '');
   }
 
   if (!stdout) {
@@ -131,7 +145,7 @@ export class CliProcessService {
   }
 
   async startProcess(options: CliRunOptions): Promise<{ pid: number; status: 'started'; agent: AgentType; message: string }> {
-    const cmd = buildCliCommand({
+    let cmd = buildCliCommand({
       prompt: options.prompt,
       prompt_file: options.prompt_file,
       workFolder: options.cwd,
@@ -141,7 +155,24 @@ export class CliProcessService {
       cliPaths: this.cliPaths,
     });
 
-    return this.startDetachedTrackedProcess(cmd, options.model);
+    // Antigravity prints no conversation id on stdout, so it is asked to write
+    // its internal log to a file the adapter can read the id back from.
+    let logPath: string | undefined;
+    if (cmd.geminiBackend === 'antigravity') {
+      logPath = this.createAntigravityLogPath();
+      cmd = buildCliCommand({
+        prompt: options.prompt,
+        prompt_file: options.prompt_file,
+        workFolder: options.cwd,
+        model: options.model,
+        session_id: options.session_id,
+        reasoning_effort: options.reasoning_effort,
+        log_file: logPath,
+        cliPaths: this.cliPaths,
+      });
+    }
+
+    return this.startDetachedTrackedProcess(cmd, options.model, logPath);
   }
 
   async listProcesses(): Promise<ProcessListItem[]> {
@@ -157,7 +188,10 @@ export class CliProcessService {
     const refreshed = this.refreshStatus(storedProcess);
     const stdout = this.readTextFileSafe(refreshed.stdoutPath);
     const stderr = this.readTextFileSafe(refreshed.stderrPath);
-    const agentOutput = parseAgentOutput(refreshed.toolType, stdout, stderr);
+    const agentOutput = parseAgentOutput(refreshed.toolType, stdout, stderr, {
+      geminiBackend: refreshed.geminiBackend,
+      logText: refreshed.logPath ? this.readTextFileSafe(refreshed.logPath) : '',
+    });
 
     return buildProcessResult({
       pid,
@@ -227,8 +261,16 @@ export class CliProcessService {
       observers.push({
         process,
         result,
-        stdoutExtractor: new PeekEventExtractor(process.toolType, { includeToolCalls, source: 'stdout' }),
-        stderrExtractor: new PeekEventExtractor(process.toolType, { includeToolCalls, source: 'stderr' }),
+        stdoutExtractor: new PeekEventExtractor(process.toolType, {
+          includeToolCalls,
+          source: 'stdout',
+          geminiBackend: process.geminiBackend ?? undefined,
+        }),
+        stderrExtractor: new PeekEventExtractor(process.toolType, {
+          includeToolCalls,
+          source: 'stderr',
+          geminiBackend: process.geminiBackend ?? undefined,
+        }),
         stdoutOffset: this.fileSizeSafe(process.stdoutPath),
         stderrOffset: this.fileSizeSafe(process.stderrPath),
       });
@@ -335,6 +377,10 @@ export class CliProcessService {
         continue;
       }
 
+      if (refreshed.logPath && existsSync(refreshed.logPath)) {
+        rmSync(refreshed.logPath, { force: true });
+      }
+
       const processDir = this.resolveStoredProcessDir(refreshed);
       if (existsSync(processDir)) {
         rmSync(processDir, { recursive: true, force: true });
@@ -353,6 +399,7 @@ export class CliProcessService {
   private async startDetachedTrackedProcess(
     cmd: Awaited<ReturnType<typeof buildCliCommand>>,
     model: string | undefined,
+    logPath?: string,
   ): Promise<{ pid: number; status: 'started'; agent: AgentType; message: string }> {
     const cwdKey = this.resolveCwdKey(cmd.cwd);
     const runnerPath = this.resolveDetachedRunnerPath();
@@ -389,6 +436,8 @@ export class CliProcessService {
       startTime: new Date().toISOString(),
       stdoutPath,
       stderrPath,
+      logPath,
+      geminiBackend: cmd.geminiBackend,
       status: 'running',
     };
     this.writeProcess(storedProcess);
@@ -490,6 +539,12 @@ export class CliProcessService {
     const tempPath = `${exitStatusPath}.${process.pid}.${Date.now()}.tmp`;
     writeFileSync(tempPath, JSON.stringify(exitStatus, null, 2) + '\n');
     renameSync(tempPath, exitStatusPath);
+  }
+
+  private createAntigravityLogPath(): string {
+    const logDir = join(this.stateDir, 'logs');
+    mkdirSync(logDir, { recursive: true });
+    return join(logDir, `${randomUUID()}.antigravity.log`);
   }
 
   private readTextFileSafe(filePath: string): string {

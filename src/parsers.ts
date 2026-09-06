@@ -1,4 +1,5 @@
 import { debugLog } from './cli-utils.js';
+import type { GeminiBackend } from './model-catalog.js';
 
 export interface PeekMessage {
   ts: string;
@@ -30,6 +31,8 @@ type PeekAgent = 'claude' | 'codex' | string | null;
 interface PeekEventExtractorOptions {
   includeToolCalls?: boolean;
   source?: 'stdout' | 'stderr';
+  /** Only meaningful for the gemini agent; defaults to the Gemini CLI. */
+  geminiBackend?: GeminiBackend;
 }
 
 interface PeekFlushOptions {
@@ -76,6 +79,39 @@ const GEMINI_STREAM_EVENT_TYPES = new Set([
 
 function isGeminiStreamJsonEvent(parsed: any): boolean {
   return parsed && typeof parsed === 'object' && !Array.isArray(parsed) && GEMINI_STREAM_EVENT_TYPES.has(parsed.type);
+}
+
+/**
+ * The Antigravity CLI does not print a conversation id on stdout; it only
+ * mentions it in its internal log, which is why the adapter passes --log-file.
+ */
+export function parseAntigravityConversationId(logText: string): string | null {
+  if (!logText) {
+    return null;
+  }
+
+  let conversationId: string | null = null;
+
+  for (const line of logText.split(/\r?\n/)) {
+    const createdMatch = line.match(/\bCreated conversation ([A-Za-z0-9._:-]+)/);
+    if (createdMatch?.[1]) {
+      conversationId = createdMatch[1];
+      continue;
+    }
+
+    const printModeMatch = line.match(/\bPrint mode: conversation=([A-Za-z0-9._:-]+)/);
+    if (printModeMatch?.[1]) {
+      conversationId = printModeMatch[1];
+      continue;
+    }
+
+    const startingMatch = line.match(/\bconversationID="([^"]+)"/);
+    if (startingMatch?.[1]) {
+      conversationId = startingMatch[1];
+    }
+  }
+
+  return conversationId;
 }
 
 function oneLine(value: unknown): string {
@@ -358,6 +394,7 @@ export class PeekEventExtractor {
   private geminiAssistantBuffer = '';
   private readonly includeToolCalls: boolean;
   private readonly source: 'stdout' | 'stderr';
+  private readonly isAntigravity: boolean;
   private readonly toolMemory = new Map<string, ToolCallMemory>();
   private forgePendingTool: PendingForgeTool | null = null;
   private forgeToolSequence = 0;
@@ -365,10 +402,16 @@ export class PeekEventExtractor {
   constructor(private readonly agent: PeekAgent, options: PeekEventExtractorOptions = {}) {
     this.includeToolCalls = options.includeToolCalls === true;
     this.source = options.source || 'stdout';
+    this.isAntigravity = agent === 'gemini' && options.geminiBackend === 'antigravity';
   }
 
   push(chunk: string, observedAt = new Date().toISOString()): PeekEvent[] {
     if (this.agent === 'forge' && this.source === 'stderr') {
+      return [];
+    }
+
+    // Antigravity writes its internal log lines to stderr; never surface those.
+    if (this.isAntigravity && this.source === 'stderr') {
       return [];
     }
 
@@ -383,6 +426,11 @@ export class PeekEventExtractor {
 
   flush(observedAt = new Date().toISOString(), options: PeekFlushOptions = {}): PeekEvent[] {
     if (this.agent === 'forge' && this.source === 'stderr') {
+      this.pending = '';
+      return [];
+    }
+
+    if (this.isAntigravity && this.source === 'stderr') {
       this.pending = '';
       return [];
     }
@@ -405,6 +453,15 @@ export class PeekEventExtractor {
   private extractLines(lines: string[], observedAt: string): PeekEvent[] {
     if (this.agent === 'forge') {
       return this.extractForgeLines(lines, observedAt);
+    }
+
+    // Antigravity stdout is plain text, so every line is message text - even a
+    // JSON-shaped answer such as {"status":"ok"}, which would otherwise parse
+    // successfully, match no stream event and silently disappear from peek.
+    if (this.isAntigravity) {
+      return lines
+        .filter((line) => line.trim())
+        .map((line) => ({ kind: 'message', ts: observedAt, text: line } as PeekEvent));
     }
 
     const events: PeekEvent[] = [];
@@ -576,8 +633,8 @@ export class PeekEventExtractor {
 export class PeekMessageExtractor {
   private readonly extractor: PeekEventExtractor;
 
-  constructor(agent: PeekAgent) {
-    this.extractor = new PeekEventExtractor(agent, { includeToolCalls: false });
+  constructor(agent: PeekAgent, options: Omit<PeekEventExtractorOptions, 'includeToolCalls'> = {}) {
+    this.extractor = new PeekEventExtractor(agent, { ...options, includeToolCalls: false });
   }
 
   push(chunk: string, observedAt = new Date().toISOString()): PeekMessage[] {
@@ -842,6 +899,21 @@ export function parseGeminiOutput(stdout: string): any {
   }
 
   return null;
+}
+
+/**
+ * Antigravity CLI output: stdout is the plain-text answer and the conversation
+ * id (used to resume with --conversation) comes from the internal log file.
+ */
+export function parseAntigravityOutput(stdout: string, logText = ''): any {
+  const sessionId = parseAntigravityConversationId(logText);
+  const message = typeof stdout === 'string' ? stdout.trim() : '';
+
+  if (!message) {
+    return sessionId ? { message: null, session_id: sessionId } : null;
+  }
+
+  return sessionId ? { message, session_id: sessionId } : { message, session_id: null };
 }
 
 export function parseForgeOutput(stdout: string): any {

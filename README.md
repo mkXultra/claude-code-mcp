@@ -21,10 +21,10 @@ This MCP server provides tools that can be used by LLMs to interact with AI CLI 
 
 - Run Claude CLI with all permissions bypassed (using `--dangerously-skip-permissions`)
 - Execute Codex CLI with approvals and sandbox bypassed (using `--dangerously-bypass-approvals-and-sandbox`)
-- Execute Gemini CLI with automatic approval mode (using `-y`)
+- Execute Gemini CLI with automatic approval mode (using `-y`), or optionally serve the `gemini` agent with the Antigravity CLI (`agy`) by setting `GEMINI_CLI_BACKEND=antigravity`
 - Execute Forge CLI in non-interactive mode (using `forge -C <workFolder> -p <prompt>`)
 - Execute OpenCode in non-interactive JSON mode (using `opencode run --format json --dir <workFolder> <prompt>`)
-- Support multiple AI models: Claude (sonnet, sonnet[1m], opus, opusplan, fable, haiku), Codex (gpt-6-astra, gpt-5.4, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.4-mini, gpt-5.3-codex, gpt-5.3-codex-spark, gpt-5.2), Gemini (gemini-2.5-pro, gemini-2.5-flash, gemini-3.1-pro-preview, gemini-3-pro-preview, gemini-3-flash-preview), Forge (`forge`), and OpenCode (`opencode` plus explicit `oc-<provider/model>` wrappers such as `oc-openai/gpt-5.4`)
+- Support multiple AI models: Claude (sonnet, sonnet[1m], opus, opusplan, fable, haiku), Codex (gpt-6-astra, gpt-5.4, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.4-mini, gpt-5.3-codex, gpt-5.3-codex-spark, gpt-5.2), Gemini (gemini-2.5-pro, gemini-2.5-flash, gemini-3.1-pro-preview, gemini-3-pro-preview, gemini-3-flash-preview; a separate Antigravity catalog is available with `GEMINI_CLI_BACKEND=antigravity`), Forge (`forge`), and OpenCode (`opencode` plus explicit `oc-<provider/model>` wrappers such as `oc-openai/gpt-5.4`)
 - Manage background processes with PID tracking
 - Parse and return structured outputs from both tools
 
@@ -167,6 +167,23 @@ codex login
 gemini auth login
 ```
 
+### For the Antigravity CLI (optional Gemini backend):
+
+The `gemini` agent runs on the Gemini CLI by default. If you would rather serve it
+with the Antigravity CLI, install the official `agy` binary, sign in once, and set
+`GEMINI_CLI_BACKEND=antigravity`:
+
+```bash
+# Install the official Antigravity CLI, then:
+agy login
+export GEMINI_CLI_BACKEND=antigravity
+```
+
+Nothing changes for anyone who does not set the variable: the default is
+`gemini-cli`, the default binary stays `gemini`, and `ai-cli doctor` only looks for
+`agy` once the Antigravity backend is selected. See
+[Gemini backends](#gemini-backends) for the model catalog and options.
+
 macOS might ask for folder permissions the first time any of these tools run. If the first run fails, subsequent runs should work.
 
 ## CLI Commands
@@ -260,10 +277,11 @@ Executes a prompt using Claude CLI, Codex CLI, Gemini CLI, Forge CLI, or OpenCod
 - Claude: `sonnet`, `sonnet[1m]`, `opus`, `opusplan`, `fable`, `haiku`
   - `fable` explicitly selects Claude Code's latest Fable model. Fable may require separately billed usage credits and is never selected implicitly by `claude-ultra`.
 - Codex: `gpt-6-astra`, `gpt-5.4`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.4-mini`, `gpt-5.3-codex`, `gpt-5.3-codex-spark`, `gpt-5.2`
-- Gemini: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3.1-pro-preview`, `gemini-3-pro-preview`, `gemini-3-flash-preview`
+- Gemini (default `gemini-cli` backend): `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3.1-pro-preview`, `gemini-3-pro-preview`, `gemini-3-flash-preview`
+- Gemini (`antigravity` backend): `Gemini 3.8 Flash (High|Medium|Low)`, `Gemini 3.7 Flash (High|Medium|Low)`, `Gemini 3.6 Flash (High|Medium|Low)`, `Gemini 3.1 Pro (High|Low)`, plus the lowercase aliases `gemini-3.8-flash-high`, `gemini-3.8-flash`, `gemini-3.8-flash-low` and their 3.7 / 3.6 / 3.1 equivalents. Requesting a model from the other backend fails with an explicit error naming the `GEMINI_CLI_BACKEND` value it needs.
 - Forge: `forge`
 - OpenCode: `opencode` for the configured default backend model, plus explicit wrappers like `oc-openai/gpt-5.4`
-- `reasoning_effort` (string, optional): Reasoning control for Claude and Codex. Claude uses `--effort` (allowed: "low", "medium", "high", "xhigh", "max"). Codex uses `model_reasoning_effort` (base levels: "low", "medium", "high", "xhigh"; GPT-6 Astra and GPT-5.6 Sol/Terra also support "max" and "ultra", while GPT-5.6 Luna supports "max"). Gemini, Forge, and OpenCode do not support `reasoning_effort`.
+- `reasoning_effort` (string, optional): Reasoning control for Claude and Codex. Claude uses `--effort` (allowed: "low", "medium", "high", "xhigh", "max"). Codex uses `model_reasoning_effort` (base levels: "low", "medium", "high", "xhigh"; GPT-6 Astra and GPT-5.6 Sol/Terra also support "max" and "ultra", while GPT-5.6 Luna supports "max"). Forge and OpenCode do not support `reasoning_effort`, and neither does Gemini on the default `gemini-cli` backend. On the `antigravity` backend Gemini accepts "low", "medium", "high" and selects the matching model variant (e.g. `gemini-3.8-flash` with `reasoning_effort: "high"` runs `Gemini 3.8 Flash (High)`); Gemini 3.1 Pro only publishes "low" and "high".
 - `session_id` (string, optional): Optional session ID to resume a previous session. Supported for Claude, Codex, Gemini, Forge, and OpenCode. OpenCode resumes in place via `--session` and may also be combined with an explicit `oc-<provider/model>` selection.
 
 ### `wait`
@@ -399,13 +417,36 @@ ACM_LIVE_E2E=1 ACM_LIVE_E2E_SURFACE=all ACM_LIVE_E2E_AGENTS=claude,codex npm run
 
 Live E2E is opt-in because it depends on installed and authenticated external CLIs, network access, provider availability, and cost budget. `ACM_LIVE_E2E_SURFACE` defaults to `cli`; use `mcp` or `all` to include the MCP server surface.
 
+## Gemini backends
+
+The `gemini` agent can be served by two different CLIs. `GEMINI_CLI_BACKEND` picks
+which one, and the default keeps the historical behavior unchanged.
+
+| Value | Behavior |
+| --- | --- |
+| `gemini-cli` (default) | Gemini CLI, exactly as before: binary `gemini`, arguments `-y --output-format stream-json`, and the `gemini-2.5-*` / `gemini-3-*` catalog. |
+| `antigravity` | Antigravity CLI: binary `agy`, arguments `--dangerously-skip-permissions --print-timeout <timeout> [--log-file <path>] [--conversation <id>] --model "<name>" -p <prompt>`, and the `Gemini 3.x` display-name catalog. |
+| `auto` | Antigravity when the resolved Gemini command is `agy` (or `agy-*`), otherwise the Gemini CLI. |
+
+Notes on the Antigravity backend:
+
+- The reasoning level is part of the model name, so `reasoning_effort` selects the
+  matching catalog variant instead of passing a CLI flag.
+- `agy` prints plain text rather than stream JSON, and its conversation id (used to
+  resume a session) is read back from a temporary log file the adapter passes with
+  `--log-file`.
+- `--print-timeout` defaults to `2h` and can be overridden with `GEMINI_PRINT_TIMEOUT`.
+- The `models` tool reports both catalogs and which backend is active.
+
 ## Advanced Configuration (Optional)
 
 Normally not required, but useful for customizing CLI paths or debugging.
 
 - `CLAUDE_CLI_NAME`: Override the Claude CLI binary name or provide an absolute path (default: `claude`)
 - `CODEX_CLI_NAME`: Override the Codex CLI binary name or provide an absolute path (default: `codex`)
-- `GEMINI_CLI_NAME`: Override the Gemini CLI binary name or provide an absolute path (default: `gemini`)
+- `GEMINI_CLI_NAME`: Override the Gemini CLI binary name or provide an absolute path (default: `gemini`, or `agy` when `GEMINI_CLI_BACKEND=antigravity`)
+- `GEMINI_CLI_BACKEND`: Which CLI serves the `gemini` agent: `gemini-cli` (default), `antigravity`, or `auto`. An unknown value is rejected with an error.
+- `GEMINI_PRINT_TIMEOUT`: Antigravity backend only. Value passed to `agy --print-timeout` (default: `2h`)
 - `FORGE_CLI_NAME`: Override the Forge CLI binary name or provide an absolute path (default: `forge`)
 - `OPENCODE_CLI_NAME`: Override the OpenCode CLI binary name or provide an absolute path (default: `opencode`)
 - `MCP_CLAUDE_DEBUG`: Enable debug logging (set to `true` for verbose output)

@@ -1,7 +1,7 @@
 import { runMcpServer } from './mcp.js';
 import { CliProcessService } from '../cli-process-service.js';
 import { getCliDoctorStatus } from '../cli-utils.js';
-import { getModelsPayload } from '../model-catalog.js';
+import { getModelsPayload, resolveConfiguredGeminiBackend } from '../model-catalog.js';
 import { validatePeekPids, validatePeekTimeSec } from '../peek.js';
 
 export const CLI_HELP_TEXT = `Usage: ai-cli <command> [options]
@@ -30,7 +30,8 @@ Options:
   --prompt-file <path>         Path to a prompt file
   --model <model>              Model name or alias (e.g. sonnet, fable, claude-ultra, gpt-6-astra, codex-ultra, gemini-2.5-pro, gemini-ultra, forge, opencode, oc-openai/gpt-5.4)
   --session-id <id>            Resume a previous session, including OpenCode in-place resumes
-  --reasoning-effort <level>   Reasoning level for Claude/Codex only; unsupported for Gemini, Forge, and OpenCode
+  --reasoning-effort <level>   Reasoning level for Claude/Codex only; unsupported for Forge, OpenCode, and Gemini
+                               (Gemini accepts low|medium|high with GEMINI_CLI_BACKEND=antigravity)
   --help, -h                   Show this help message
 
 Compatibility aliases:
@@ -405,7 +406,7 @@ export async function runCli(argv: string[], deps: Partial<CliDeps> = {}): Promi
       stdout(MODELS_HELP_TEXT);
       return 0;
     }
-    writeJson(stdout, getModelsPayload());
+    writeJson(stdout, getModelsPayload(resolveConfiguredGeminiBackend()));
     return 0;
   }
 

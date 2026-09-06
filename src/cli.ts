@@ -40,7 +40,8 @@ Options:
   --prompt             Prompt string (mutually exclusive with --prompt_file)
   --prompt_file        Path to a file containing the prompt
   --session_id         Session ID to resume, including OpenCode in-place resumes
-  --reasoning_effort   Claude/Codex only: Claude=low|medium|high|xhigh|max, Codex=low|medium|high|xhigh (GPT-6 Astra/GPT-5.6: max; Astra/Sol/Terra: ultra); unsupported for Gemini, Forge, and OpenCode
+  --reasoning_effort   Claude=low|medium|high|xhigh|max, Codex=low|medium|high|xhigh (GPT-6 Astra/GPT-5.6: max; Astra/Sol/Terra: ultra); unsupported for Gemini, Forge, and OpenCode
+                       (Gemini accepts low|medium|high with GEMINI_CLI_BACKEND=antigravity, selecting the matching agy model variant)
   --help               Show this help message
 
 Raw CLI output goes to stdout. Use cli.run.parse to parse the output:

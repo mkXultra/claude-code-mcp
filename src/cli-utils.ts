@@ -2,6 +2,11 @@ import { accessSync, constants } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import * as path from 'path';
+import {
+  DEFAULT_ANTIGRAVITY_CLI_NAME,
+  DEFAULT_GEMINI_CLI_NAME,
+  readGeminiBackendModeSafe,
+} from './model-catalog.js';
 
 const debugMode = process.env.MCP_CLAUDE_DEBUG === 'true';
 
@@ -221,11 +226,15 @@ function getCliBinaryConfig(name: CliBinaryName): {
     };
   }
 
+  // The gemini agent defaults to the Gemini CLI. Only GEMINI_CLI_BACKEND=antigravity
+  // switches the default binary to the official Antigravity CLI (agy), so doctor
+  // never reports agy as missing for anyone who has not opted in.
+  const usesAntigravity = readGeminiBackendModeSafe() === 'antigravity';
   return {
     envVarName: 'GEMINI_CLI_NAME',
     customCliName: process.env.GEMINI_CLI_NAME,
-    defaultCliName: 'gemini',
-    localInstallPath: join(homedir(), '.gemini', 'local', 'gemini'),
+    defaultCliName: usesAntigravity ? DEFAULT_ANTIGRAVITY_CLI_NAME : DEFAULT_GEMINI_CLI_NAME,
+    localInstallPath: usesAntigravity ? undefined : join(homedir(), '.gemini', 'local', 'gemini'),
   };
 }
 
